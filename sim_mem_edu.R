@@ -3,12 +3,12 @@ p_load(dplyr, tidyr, magrittr, psych, mirt, data.table, ggplot2, readxl,
        lm.beta, readr, stringr, simDAG)
 
 source("src/simCog.R")
+dem_logr <- readRDS("~/Dropbox/Projects/crosswalk-and-co/models/dem_logr.Rds")
 
 # Simulation Parameters -----------------------------------------------
 
-n_sample <- 500 # per group
+n_sample <- 1000 # per group
 prop_high_edu <- .30
-var_edu <- prop_high_edu * (1 - prop_high_edu)
 
 b0 <- 0 # intercept of memory theta regressed on education
 b1 <- .2 # slope of memory theta regressed on education
@@ -46,7 +46,7 @@ mem_fscores_G1 <- simCog(itempars = item_pars_M_G1,
                          edu_prob_1 = .3, 
                          b0 = 0, 
                          b1 = .2, 
-                         n_sample = 500, 
+                         n_sample = n_sample, 
                          cogname = "Mem", 
                          groupname = "Group 1")
 
@@ -67,9 +67,9 @@ mem_fscores_G2 <- simCog(itempars = item_pars_M_G2,
                          edu_prob_1 = .3, 
                          b0 = 0, 
                          b1 = .2, 
-                         n_sample = 500, 
+                         n_sample = n_sample, 
                          cogname = "Mem", 
-                         groupname = "Group 1")
+                         groupname = "Group 2")
 
 
 # Combine -----------------------------------------------------------------
@@ -79,4 +79,21 @@ head(mem_fscores_G2)
 
 mem_fscores <- bind_rows(mem_fscores_G1, mem_fscores_G2)
 
+mem_fscores <- mem_fscores %>%
+  mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
+         Dementia = ifelse(DemProb >= .9, 1, 0))
+
+psych::describe(mem_fscores %>%
+                  select(theta, edu, Mem_FS, DemProb, Dementia))
+
+psych::describeBy(mem_fscores %>%
+                    select(theta, edu, Mem_FS, DemProb, Dementia),
+                  mem_fscores$Group)
+
+# Scenario 1 --------------------------------------------------------------
+
+cc1 <- cocalibrate(rg_dat = mem_fscores_G1,
+                   fg_dat = mem_fscores_G2,
+                   rg_items = c("ravtot1a", "ravtot2a", "ravtot3a", "ravtot4a", "ravtot5a", "ravtot6a", "ravtotba"),
+                   fg_items = c("mmarea", "mmdate", "mmday", "mmfloor", "ravtot5a", "ravtot6a", "ravtotba"))
 

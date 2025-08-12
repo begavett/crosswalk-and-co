@@ -19,14 +19,16 @@ simCog <- function(itempars, itemnames, edu_prob_1 = .3, b0 = 0, b1 = .2, n_samp
   
   thetas <- b0 + b1*edu + rnorm(n_sample, mean = 0, sd = sigma)
   thetas_df <- data.frame(theta = thetas, edu = edu)
-  # 
-  # 
-  # lm(theta ~ edu, data = thetas_df) %>%
-  #   summary()
-  # 
-  # lm(theta ~ edu, data = thetas_df) %>%
-  #   lm.beta::lm.beta() %>%
-  #   summary()
+  
+  describe(thetas_df)
+
+
+  lm(theta ~ edu, data = thetas_df) %>%
+    summary()
+
+  lm(theta ~ edu, data = thetas_df) %>%
+    lm.beta::lm.beta() %>%
+    summary()
   
   sim_item_resp <- mirt::simdata(a = data.matrix(itempars %>% pull(a1)),
                                       d = as.vector(itempars %>% dplyr::select(starts_with("d"))) %>%
