@@ -4,7 +4,7 @@ p_load(dplyr, tidyr, magrittr, psych, mirt, data.table, ggplot2, readxl,
 
 source("src/simCog.R")
 source("src/cocalibrate.R")
-dem_logr <- readRDS("~/Dropbox/Projects/crosswalk-and-co/models/dem_logr.Rds")
+dem_logr <- readRDS("models/dem_logr.Rds")
 
 # Simulation Parameters -----------------------------------------------
 
