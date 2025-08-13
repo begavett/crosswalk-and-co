@@ -146,7 +146,10 @@ cc1 <- cocalibrate(rg_dat = scenario_data1_rg,
                    rg_items = item_lists[[combos[s == 1 & o == 1, id]]],
                    fg_items = item_lists[[combos[s == 1 & o == 2, id]]])
 
-cc1_data <- bind_rows(cc1$fscores_rg, cc1$fscores_fg)
+cc1_data <- bind_rows(cc1$fscores_rg %>%
+                        set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")), 
+                      cc1$fscores_fg %>%
+                        set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")))
 
 psych::describeBy(cc1_data, cc1_data$Group)
 
@@ -154,3 +157,97 @@ psych::describeBy(cc1_data, cc1_data$Group)
 mem_fscores <- bind_cols(mem_fscores, cc1_data %>% select(-Group))
 
 psych::describeBy(mem_fscores, mem_fscores$Group)
+
+
+
+# Scenario 2 --------------------------------------------------------------
+
+scenario_data2 <- scenario_data[[2]]
+
+scenario_data2_rg <- scenario_data2 %>%
+  filter(Group == "Group 1") %>%
+  data.frame()
+
+scenario_data2_fg <- scenario_data2 %>%
+  filter(Group == "Group 2") %>%
+  data.frame()
+
+cc2 <- cocalibrate(rg_dat = scenario_data2_rg,
+                   fg_dat = scenario_data2_fg,
+                   rg_items = item_lists[[combos[s == 2 & o == 1, id]]],
+                   fg_items = item_lists[[combos[s == 2 & o == 2, id]]])
+
+cc2_data <- bind_rows(cc2$fscores_rg %>%
+                        set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")), 
+                      cc2$fscores_fg %>%
+                        set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")))
+
+psych::describeBy(cc2_data, cc2_data$Group)
+
+
+mem_fscores <- bind_cols(mem_fscores, cc2_data %>% select(-Group))
+
+psych::describeBy(mem_fscores, mem_fscores$Group)
+
+
+# Scenario 3 --------------------------------------------------------------
+
+scenario_data3 <- scenario_data[[3]]
+
+scenario_data3_rg <- scenario_data3 %>%
+  filter(Group == "Group 1") %>%
+  data.frame()
+
+scenario_data3_fg <- scenario_data3 %>%
+  filter(Group == "Group 2") %>%
+  data.frame()
+
+cc3 <- cocalibrate(rg_dat = scenario_data3_rg,
+                   fg_dat = scenario_data3_fg,
+                   rg_items = item_lists[[combos[s == 3 & o == 1, id]]],
+                   fg_items = item_lists[[combos[s == 3 & o == 2, id]]])
+
+cc3_data <- bind_rows(cc3$fscores_rg %>%
+                        set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")), 
+                      cc3$fscores_fg %>%
+                        set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")))
+
+psych::describeBy(cc3_data, cc3_data$Group)
+
+
+mem_fscores <- bind_cols(mem_fscores, cc3_data %>% select(-Group))
+
+psych::describeBy(mem_fscores, mem_fscores$Group)
+
+
+# Scenario 4 --------------------------------------------------------------
+
+scenario_data4 <- scenario_data[[4]]
+
+scenario_data4_rg <- scenario_data4 %>%
+  filter(Group == "Group 1") %>%
+  data.frame()
+
+scenario_data4_fg <- scenario_data4 %>%
+  filter(Group == "Group 2") %>%
+  data.frame()
+
+cc4 <- cocalibrate(rg_dat = scenario_data4_rg,
+                   fg_dat = scenario_data4_fg,
+                   rg_items = item_lists[[combos[s == 4 & o == 1, id]]],
+                   fg_items = item_lists[[combos[s == 4 & o == 2, id]]])
+
+cc4_data <- bind_rows(cc4$fscores_rg %>%
+                        set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")), 
+                      cc4$fscores_fg %>%
+                        set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")))
+
+psych::describeBy(cc4_data, cc4_data$Group)
+
+
+mem_fscores <- bind_cols(mem_fscores, cc4_data %>% select(-Group))
+
+psych::describeBy(mem_fscores, mem_fscores$Group)
+
+
+
