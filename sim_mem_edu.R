@@ -14,26 +14,24 @@ prop_high_edu <- .30
 b0 <- 0 # intercept of memory theta regressed on education
 b1 <- .2 # slope of memory theta regressed on education
 
-
-## Memory Parameters --------------------------------------------------
-
 RecodedItemName_M <- read_csv("data/RecodedItemName_m.csv")
 useMemItems <- which(!str_detect(RecodedItemName_M$RecodedItemName, "^rav.+b$"))
 ItemNames <- RecodedItemName_M %>%
   slice(useMemItems) %>%
   pull(RecodedItemName)
 
-Loadings_M <- read_csv("data/a_m.csv") %>%
-  slice(useMemItems)
-
 
 # Group 1 -----------------------------------------------------------------
+
+Loadings_M_G1 <- read_excel("~/Dropbox/PsyMCA2025_Sharing/W4.5.4/Memory/b_m.xlsx", 
+                              sheet = "b_m") %>%
+  select(a)
 
 Thresholds_M_G1 <- read_excel("~/Dropbox/PsyMCA2025_Sharing/W4.5.4/Memory/b_m.xlsx", 
                               sheet = "b_m") %>%
   select(-a, -RecodedItemName)
 
-item_pars_M_G1 <- traditional2mirt(bind_cols(Loadings_M, Thresholds_M_G1), 
+item_pars_M_G1 <- traditional2mirt(bind_cols(Loadings_M_G1, Thresholds_M_G1), 
                                    "graded", 
                                    ncat = ncol(Thresholds_M_G1) + 1) 
 
@@ -50,11 +48,15 @@ mem_fscores_G1 <- simCog(itempars = item_pars_M_G1,
 
 # Group 2 -----------------------------------------------------------------
 
+Loadings_M_G2 <- read_excel("~/Dropbox/PsyMCA2025_Sharing/W4.5.4/Memory/b_m.xlsx", 
+                            sheet = "b_m_group2") %>%
+  select(a)
+
 Thresholds_M_G2 <- read_excel("~/Dropbox/PsyMCA2025_Sharing/W4.5.4/Memory/b_m.xlsx", 
                               sheet = "b_m_group2") %>%
   select(ends_with("_dif"), -DIF, -a_dif)
 
-item_pars_M_G2 <- traditional2mirt(bind_cols(Loadings_M, Thresholds_M_G2), 
+item_pars_M_G2 <- traditional2mirt(bind_cols(Loadings_M_G2, Thresholds_M_G2), 
                                    "graded", 
                                    ncat = ncol(Thresholds_M_G2) + 1)
 
@@ -110,8 +112,8 @@ get_scenario_data <- function(scenario_num, data = mem_fscores){
   subset <- copy(data)
   
   ## get items
-  items_group1 <- item_lists[[combos[s == scenario_num & o == 1, id]]]
-  items_group2 <- item_lists[[combos[s == scenario_num & o == 2, id]]]
+  items_group1 <- item_lists[[combos[s == scenario_num & g == 1, id]]]
+  items_group2 <- item_lists[[combos[s == scenario_num & g == 2, id]]]
   items <- unique(c(items_group1, items_group2))
   
   ## get subset of variables
@@ -143,8 +145,8 @@ scenario_data1_fg <- scenario_data1 %>%
 
 cc1 <- cocalibrate(rg_dat = scenario_data1_rg,
                    fg_dat = scenario_data1_fg,
-                   rg_items = item_lists[[combos[s == 1 & o == 1, id]]],
-                   fg_items = item_lists[[combos[s == 1 & o == 2, id]]])
+                   rg_items = item_lists[[combos[s == 1 & g == 1, id]]],
+                   fg_items = item_lists[[combos[s == 1 & g == 2, id]]])
 
 cc1_data <- bind_rows(cc1$fscores_rg %>%
                         set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")), 
@@ -174,8 +176,8 @@ scenario_data2_fg <- scenario_data2 %>%
 
 cc2 <- cocalibrate(rg_dat = scenario_data2_rg,
                    fg_dat = scenario_data2_fg,
-                   rg_items = item_lists[[combos[s == 2 & o == 1, id]]],
-                   fg_items = item_lists[[combos[s == 2 & o == 2, id]]])
+                   rg_items = item_lists[[combos[s == 2 & g == 1, id]]],
+                   fg_items = item_lists[[combos[s == 2 & g == 2, id]]])
 
 cc2_data <- bind_rows(cc2$fscores_rg %>%
                         set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")), 
@@ -204,8 +206,8 @@ scenario_data3_fg <- scenario_data3 %>%
 
 cc3 <- cocalibrate(rg_dat = scenario_data3_rg,
                    fg_dat = scenario_data3_fg,
-                   rg_items = item_lists[[combos[s == 3 & o == 1, id]]],
-                   fg_items = item_lists[[combos[s == 3 & o == 2, id]]])
+                   rg_items = item_lists[[combos[s == 3 & g == 1, id]]],
+                   fg_items = item_lists[[combos[s == 3 & g == 2, id]]])
 
 cc3_data <- bind_rows(cc3$fscores_rg %>%
                         set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")), 
@@ -234,8 +236,8 @@ scenario_data4_fg <- scenario_data4 %>%
 
 cc4 <- cocalibrate(rg_dat = scenario_data4_rg,
                    fg_dat = scenario_data4_fg,
-                   rg_items = item_lists[[combos[s == 4 & o == 1, id]]],
-                   fg_items = item_lists[[combos[s == 4 & o == 2, id]]])
+                   rg_items = item_lists[[combos[s == 4 & g == 1, id]]],
+                   fg_items = item_lists[[combos[s == 4 & g == 2, id]]])
 
 cc4_data <- bind_rows(cc4$fscores_rg %>%
                         set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")), 
