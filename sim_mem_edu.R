@@ -1,6 +1,7 @@
 library(pacman)
 p_load(dplyr, tidyr, magrittr, psych, mirt, data.table, ggplot2, readxl, 
        lm.beta, readr, stringr, simDAG, data.table)
+set.seed(33333)
 
 source("src/simCog.R")
 source("src/cocalibrate.R")
@@ -8,11 +9,15 @@ dem_logr <- readRDS("models/dem_logr.Rds")
 
 # Simulation Parameters -----------------------------------------------
 
-n_sample <- 1000 # per group
+n_sample <- 50001 # per group
 prop_high_edu <- .30
 
 b0 <- 0 # intercept of memory theta regressed on education
 b1 <- .2 # slope of memory theta regressed on education
+
+scenario_labels <- data.table(scenario = 1:4, 
+                              slabel = c("No DIF + Strong anchor", "No DIF + Weak anchor", 
+                                         "Weak DIF + Strong anchor", "Strong DIF + Strong anchor"))
 
 RecodedItemName_M <- read_csv("data/RecodedItemName_m.csv")
 useMemItems <- which(!str_detect(RecodedItemName_M$RecodedItemName, "^rav.+b$"))
@@ -35,7 +40,7 @@ item_pars_M_G1 <- traditional2mirt(bind_cols(Loadings_M_G1, Thresholds_M_G1),
                                    "graded", 
                                    ncat = ncol(Thresholds_M_G1) + 1) 
 
-set.seed(3987)
+
 mem_fscores_G1 <- simCog(itempars = item_pars_M_G1, 
                          itemnames = ItemNames, 
                          edu_prob_1 = .3, 
@@ -50,7 +55,8 @@ mem_fscores_G1 <- simCog(itempars = item_pars_M_G1,
 
 Loadings_M_G2 <- read_excel("~/Dropbox/PsyMCA2025_Sharing/W4.5.4/Memory/b_m.xlsx", 
                             sheet = "b_m_group2") %>%
-  select(a)
+  select(a_dif) %>%
+  rename(a = a_dif)
 
 Thresholds_M_G2 <- read_excel("~/Dropbox/PsyMCA2025_Sharing/W4.5.4/Memory/b_m.xlsx", 
                               sheet = "b_m_group2") %>%
@@ -60,7 +66,6 @@ item_pars_M_G2 <- traditional2mirt(bind_cols(Loadings_M_G2, Thresholds_M_G2),
                                    "graded", 
                                    ncat = ncol(Thresholds_M_G2) + 1)
 
-set.seed(4365)
 mem_fscores_G2 <- simCog(itempars = item_pars_M_G2, 
                          itemnames = ItemNames, 
                          edu_prob_1 = .3, 
@@ -96,11 +101,11 @@ scenario_map <- fread("data/scenarios.csv")
 items <- names(scenario_map)[!names(scenario_map) %in% c("scenario", "outcome")]
 scenario_map <- melt.data.table(scenario_map, id.vars = c("scenario", "outcome"), variable.name = "item", value.name = "value")
 
-items <- function(s, o){
-  as.character(scenario_map[scenario == s & outcome == o & value == 1, item])
+items <- function(s, g){
+  as.character(scenario_map[scenario == s & outcome == g & value == 1, item])
 }
 
-combos <- as.data.table(expand.grid(s = 1:4, o = 1:2))
+combos <- as.data.table(expand.grid(s = 1:4, g = 1:2))
 item_lists <- purrr::pmap(combos, items)
 
 ## make id variable for combos of scenarios and groups
@@ -253,3 +258,29 @@ psych::describeBy(mem_fscores, mem_fscores$Group)
 
 
 
+# Run regression models on cocalibrated scores -------------------------------------
+
+cocalibrated_regressions <- function(scenario){
+  model_formula <- as.formula(paste0("S", scenario, "_Mem_FS ~ edu"))
+  
+  g1_model <- lm(model_formula, data = mem_fscores[Group == "Group 1"])
+  g1_params <- as.data.table(parameters::model_parameters(g1_model))
+  
+  g2_model <- lm(model_formula, data = mem_fscores[Group == "Group 2"])
+  g2_params <- as.data.table(parameters::model_parameters(g2_model))
+  
+  result <- data.table(scenario = scenario, 
+                       crosswalk_to = c("Group 2", "Group 1"), 
+                       coef = c(g1_params$Coefficient[g1_params$Parameter == "edu"], 
+                                g2_params$Coefficient[g2_params$Parameter == "edu"]))
+  result <- merge(result, scenario_labels, by = "scenario")                              
+  
+  return(result)                               
+}
+
+cocalibration_results <- rbindlist(lapply(1:combos[, max(s)], cocalibrated_regressions))
+
+
+x <- ggplot(mem_fscores, aes(x = edu, y = S2_Mem_FS)) + 
+  geom_jitter() + 
+  theme_bw()
