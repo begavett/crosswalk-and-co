@@ -14,7 +14,8 @@ cocalibrate <- function(rg_dat,
   mirt_rg <- mirt(data = rg_dat %>%
                     select(all_of(rg_items)),
                   model = 1,
-                  itemtype = "graded")
+                  itemtype = "graded",
+                  technical = list(NCYCLES = 1000))
   
   itembank_rg <- data.frame(coef(mirt_rg, simplify = TRUE)$items) %>%
     mutate(item = rownames(.))
@@ -42,7 +43,8 @@ cocalibrate <- function(rg_dat,
                      select(all_of(fg_items)),
                    model = 1,
                    itemtype = "graded",
-                   pars = "values")
+                   pars = "values",
+                   technical = list(NCYCLES = 1000))
   
   mirt_fg0_partable <- mirt_fg0
   
@@ -70,7 +72,8 @@ cocalibrate <- function(rg_dat,
                      select(all_of(fg_items)),
                    model = 1,
                    itemtype = "graded",
-                   pars = mirt_fg0_partable)
+                   pars = mirt_fg0_partable,
+                  technical = list(NCYCLES = 1000))
   
   coef(mirt_rg, simplify = TRUE)
   coef(mirt_fg, simplify = TRUE)

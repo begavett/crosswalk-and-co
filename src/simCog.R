@@ -41,7 +41,8 @@ simCog <- function(itempars, itemnames, edu_prob_1 = .3, b0 = 0, b1 = .2, n_samp
     set_names(ItemNames)
   
   cog_mirt <- mirt(data = sim_item_resp, model = paste0(cogname, ' = 1-', ncol(sim_item_resp)),
-                      itemtype = "graded")
+                      itemtype = "graded",
+                   technical = list(NCYCLES = 1000))
   
   sim_item_resp <- fscores(cog_mirt, full.scores.SE = TRUE) %>%
     data.frame() %>%
