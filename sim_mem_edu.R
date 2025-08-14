@@ -333,6 +333,6 @@ sim_cwxco <- function() {
   return(cwxco)
 }
 
-niter <- 2
-results <- replicate(2, sim_cwxco(), simplify = FALSE)
+niter <- 20
+results <- replicate(niter, sim_cwxco(), simplify = FALSE)
 
