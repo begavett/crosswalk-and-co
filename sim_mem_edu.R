@@ -1,7 +1,7 @@
 #remotes::install_github("jrgant/cogxwalkr")
 library(pacman)
 p_load(dplyr, tidyr, magrittr, psych, mirt, data.table, ggplot2, readxl, 
-       lm.beta, readr, stringr, simDAG, data.table, cogxwalkr)
+       readr, stringr, simDAG, data.table, cogxwalkr)
 set.seed(33333)
 
 code_dir <- "~/Dropbox/Projects/crosswalk-and-co/" #"C:/Users/emmanich/code/crosswalk-and-co/"
