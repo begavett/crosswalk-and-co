@@ -334,5 +334,5 @@ sim_cwxco <- function() {
 }
 
 niter <- 2
-results <- replicate(2, sim_cwxco(), simplify = FALSE)
+results <- replicate(iter, sim_cwxco(), simplify = FALSE)
 
