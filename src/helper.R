@@ -54,7 +54,8 @@ cocalibrate <- function(rg_dat,
                     select(all_of(rg_items)),
                   model = 1,
                   itemtype = "graded",
-                  technical = list(NCYCLES = 5000))
+                  technical = list(NCYCLES = 5000),
+                  verbose = FALSE)
   
   itembank_rg <- data.frame(coef(mirt_rg, simplify = TRUE)$items) %>%
     mutate(item = rownames(.))
@@ -83,7 +84,8 @@ cocalibrate <- function(rg_dat,
                    model = 1,
                    itemtype = "graded",
                    pars = "values",
-                   technical = list(NCYCLES = 5000))
+                   technical = list(NCYCLES = 5000),
+                   verbose = FALSE)
   
   mirt_fg0_partable <- mirt_fg0
   
@@ -112,7 +114,8 @@ cocalibrate <- function(rg_dat,
                   model = 1,
                   itemtype = "graded",
                   pars = mirt_fg0_partable,
-                  technical = list(NCYCLES = 5000))
+                  technical = list(NCYCLES = 5000),
+                  verbose = FALSE)
   
   coef(mirt_rg, simplify = TRUE)
   coef(mirt_fg, simplify = TRUE)
@@ -167,16 +170,16 @@ cocalibrate <- function(rg_dat,
 #   - Relies on 'parameters::model_parameters()' for standardized extraction 
 #     of model results.
 
-cocalibrated_regressions <- function(scenario){
+cocalibrated_regressions <- function(scenario, factorscores = mem_fscores){
   library(parameters)
   library(data.table)
   
   model_formula <- as.formula(paste0("S", scenario, "_Mem_FS ~ edu"))
   
-  g1_model <- lm(model_formula, data = mem_fscores[Group == "Group 1"])
+  g1_model <- lm(model_formula, data = factorscores[Group == "Group 1"])
   g1_params <- as.data.table(parameters::model_parameters(g1_model))
   
-  g2_model <- lm(model_formula, data = mem_fscores[Group == "Group 2"])
+  g2_model <- lm(model_formula, data = factorscores[Group == "Group 2"])
   g2_params <- as.data.table(parameters::model_parameters(g2_model))
   
   result <- data.table(scenario = scenario, 
@@ -273,12 +276,12 @@ getcrosswalk <- function(groupdata, cog1, cog2)
 #' }
 #'
 
-get_scenario_data <- function(scenario_num, data = mem_fscores){
+get_scenario_data <- function(scenario_num, data = mem_fscores, i_l = item_lists, combs = combos){
   subset <- copy(data)
   
   ## get items
-  items_group1 <- item_lists[[combos[s == scenario_num & g == 1, id]]]
-  items_group2 <- item_lists[[combos[s == scenario_num & g == 2, id]]]
+  items_group1 <- i_l[[combs[s == scenario_num & g == 1, id]]]
+  items_group2 <- i_l[[combs[s == scenario_num & g == 2, id]]]
   items <- unique(c(items_group1, items_group2))
   
   ## get subset of variables
@@ -326,12 +329,118 @@ getscore <- function(scendat, itemnms, scorenm)
   library(mirt)
   data <- scendat %>% select(all_of(itemnms)) 
   mirtout <- mirt(data, model = 1, itemtype = "graded",
-                  technical = list(NCYCLES = 5000))
+                  technical = list(NCYCLES = 5000),
+                  verbose = FALSE)
   score <- fscores(mirtout, full.scores.SE = FALSE)
   colnames(score) <- scorenm
   scendat <- cbind.data.frame(scendat, score)
   ## left_join(cbind.data.frame(score, ID = data$ID), by = "ID")
   return(scendat)
+}
+
+
+# simCog ------------------------------------------------------------------
+
+#' Simulate cognitive test data under an IRT framework
+#'
+#' This function generates synthetic item responses for a cognitive construct 
+#' using provided item parameters, a latent regression on education, and 
+#' simulates factor scores with the `mirt` package.
+#'
+#' @param itempars Data frame of item parameters (must include slope `a1` and 
+#'   threshold parameters `d1`, `d2`, ...).
+#' @param itemnames Character vector of item names corresponding to the rows 
+#'   of `itempars`.
+#' @param prop_high_edu Numeric in [0,1]. Probability of having high education 
+#'   in the simulated sample (default = 0.3).
+#' @param b0 Numeric. Intercept of the latent regression on education (default = 0).
+#' @param b1 Numeric. Slope of the latent regression on education (default = 0.2).
+#' @param n_sample Integer. Number of participants to simulate (default = 500).
+#' @param cogname Character. Name of the cognitive domain (default = "Mem").
+#'   Used to label simulated factor score variables.
+#' @param groupname Character. Group identifier to attach to the simulated data.
+#'
+#' @return A data frame with:
+#'   \item{theta}{True latent ability values.}
+#'   \item{edu}{Simulated education variable (0/1).}
+#'   \item{[cogname]_FS}{Estimated factor scores from IRT model.}
+#'   \item{[cogname]_FS_SE}{Standard errors of factor scores.}
+#'   \item{[items]}{Simulated item responses.}
+#'   \item{Group}{Group identifier supplied via `groupname`.}
+#'
+#' @details
+#' The function:
+#'   1. Determines item types (`dich` vs `graded`) from number of thresholds.
+#'   2. Simulates a binary education variable with probability `prop_high_edu`.
+#'   3. Generates latent abilities as `theta = b0 + b1 * edu + error`, 
+#'      where error variance is scaled to unit variance.
+#'   4. Uses `mirt::simdata()` to simulate item responses given item parameters 
+#'      and latent traits.
+#'   5. Fits a unidimensional IRT model with `mirt()` to recover factor scores.
+#'   6. Returns a combined dataset of true and estimated scores, item responses, 
+#'      and group labels.
+#'
+#' @examples
+#' \dontrun{
+#' # Suppose 'itempars' is a data frame of IRT parameters:
+#' sim_data <- simCog(itempars, itemnames = rownames(itempars), 
+#'                    prop_high_edu = 0.3, n_sample = 1000, 
+#'                    cogname = "Mem", groupname = "Group 1")
+#' head(sim_data)
+#' }
+#'
+#' @seealso [mirt::simdata()], [mirt::mirt()], [mirt::fscores()]
+#'
+
+simCog <- function(itempars, itemnames, prop_high_edu = .3, b0 = 0, b1 = .2, n_sample = 500, cogname = "Mem", groupname) {
+  
+  library(simDAG)
+  library(dplyr)
+  library(magrittr)
+  
+  itemtypes <- itempars %>%
+    select(starts_with("d")) %>%
+    rowwise() %>%
+    mutate(nThresh = sum(!is.na(c_across(everything())))) %>%
+    ungroup() %>%
+    mutate(itemtype = ifelse(nThresh == 1, "dich", "graded")) %>%
+    pull(itemtype)
+  
+  edu <- rbernoulli(n_sample, p = prop_high_edu, output = "numeric")
+  var_edu <- prop_high_edu * (1 - prop_high_edu)
+  sigma2 <- 1 - (b1^2 * var_edu)
+  sigma <- sqrt(sigma2)
+  
+  thetas <- b0 + b1*edu + rnorm(n_sample, mean = 0, sd = sigma)
+  thetas_df <- data.frame(theta = thetas, edu = edu)
+  
+  # describe(thetas_df)
+  
+  
+  sim_item_resp <- mirt::simdata(a = data.matrix(itempars %>% pull(a1)),
+                                 d = as.vector(itempars %>% dplyr::select(starts_with("d"))) %>%
+                                   unlist() %>%
+                                   as.numeric() %>%
+                                   matrix(nrow = nrow(itempars %>% dplyr::select(starts_with("d"))), byrow = FALSE),
+                                 itemtype = itemtypes,
+                                 Theta = data.matrix(thetas)) %>%
+    as_tibble() %>%
+    set_names(ItemNames)
+  
+  cog_mirt <- mirt(data = sim_item_resp, model = paste0(cogname, ' = 1-', ncol(sim_item_resp)),
+                   itemtype = "graded",
+                   technical = list(NCYCLES = 5000),
+                   verbose = FALSE)
+  
+  sim_item_resp <- fscores(cog_mirt, full.scores.SE = TRUE) %>%
+    data.frame() %>%
+    set_names(paste0(cogname, c("_FS", "_FS_SE"))) %>%
+    bind_cols(sim_item_resp)
+  
+  cog_fscores <- bind_cols(thetas_df, sim_item_resp) %>%
+    mutate(Group = groupname)
+  
+  return(cog_fscores)
 }
 
 
@@ -380,8 +489,9 @@ getscore <- function(scendat, itemnms, scorenm)
 #'
 #'
 
-sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
+sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9) {
   
+  set.seed(iter)
   
   # Group 1 -----------------------------------------------------------------
   
@@ -400,10 +510,10 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
   
   mem_fscores_G1 <- simCog(itempars = item_pars_M_G1, 
                            itemnames = ItemNames, 
-                           prop_high_edu = .3, 
-                           b0 = 0, 
-                           b1 = .2, 
-                           n_sample = n_sample, 
+                           prop_high_edu = prop_high_edu, 
+                           b0 = b0, 
+                           b1 = b1, 
+                           n_sample = N, 
                            cogname = "Mem", 
                            groupname = "Group 1")
   
@@ -424,10 +534,10 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
   
   mem_fscores_G2 <- simCog(itempars = item_pars_M_G2, 
                            itemnames = ItemNames, 
-                           edu_prob_1 = .3, 
-                           b0 = 0, 
-                           b1 = .2, 
-                           n_sample = n_sample, 
+                           prop_high_edu = prop_high_edu, 
+                           b0 = b0, 
+                           b1 = b1, 
+                           n_sample = N, 
                            cogname = "Mem", 
                            groupname = "Group 2")
   
@@ -441,7 +551,7 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
   
   mem_fscores <- mem_fscores %>%
     mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
-           Dementia = ifelse(DemProb >= .9, 1, 0))
+           Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
   
   # psych::describe(mem_fscores %>%
   #                   select(theta, edu, Mem_FS, DemProb, Dementia))
@@ -453,9 +563,9 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
   
   # Define Scenarios -----------------------------------------------------------
   
-  scenario_map <- fread(paste0(code_dir, "data/scenarios.csv"))
-  items <- names(scenario_map)[!names(scenario_map) %in% c("scenario", "outcome")]
-  scenario_map <- melt.data.table(scenario_map, id.vars = c("scenario", "outcome"), 
+  scenarios <- fread(paste0(code_dir, "data/scenarios.csv"))
+  item_names <- names(scenarios)[!names(scenarios) %in% c("scenario", "outcome")]
+  scenario_map <- melt.data.table(scenarios, id.vars = c("scenario", "outcome"), 
                                   variable.name = "item", value.name = "value")
   
   items <- function(s, g){
@@ -471,7 +581,8 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
   # Get scenario data -----------------------------------------------------------
   
   mem_fscores <- as.data.table(mem_fscores)
-  scenario_data <- lapply(1:combos[, max(s)], get_scenario_data)
+  scenario_data <- lapply(1:combos[, max(s)], get_scenario_data,
+                          data = mem_fscores, i_l = item_lists, combs = combos)
   
   
   
@@ -601,7 +712,7 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
   
   
   
-  cocalibration_results <- rbindlist(lapply(1:combos[, max(s)], cocalibrated_regressions))
+  cocalibration_results <- rbindlist(lapply(1:combos[, max(s)], cocalibrated_regressions, factorscores = mem_fscores))
   
   
   # x <- ggplot(mem_fscores, aes(x = edu, y = S2_Mem_FS)) + 
@@ -629,19 +740,33 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
                                  getcrosswalk(groupdatalist[[2]], "score1", "score2"))
     edufits <- list(lm(score2 ~ edu, groupdatalist[[2]]),
                     lm(score1 ~ edu, groupdatalist[[1]]))
-    coefs = sapply(1:2, function(i)
+    
+    coefs <- sapply(1:2, function(i)
     {
       coef(crswkoutlist[[scen]][[i]]$fit)*coef(edufits[[i]])["edu"]
     })
+    
+    # BG added edufits2 2025-08-16 someone check this is right
+    
+    edufits2 <- list(lm(score1 ~ edu, groupdatalist[[2]]),
+                    lm(score2 ~ edu, groupdatalist[[1]]))
+    
+    # BG added truecoefs 2025-08-16 someone check this is right
+    truecoefs <- sapply(1:2, function(i)
+    {
+      coef(edufits2[[i]])["edu"]
+    })
+    
     outdfs[[scen]] <- cbind.data.frame(scenario = scen, crosswalk_to = c("Group 2", "Group 1"),
-                                       coefs = coefs)
+                                       coefs = coefs, truecoefs = truecoefs) # BG added truecoefs 2025-08-16 someone check this is right
   }
   allout <- do.call(rbind.data.frame, outdfs)
   
-  cocalibration_results
+  # cocalibration_results
   
   cwxco <- cocalibration_results %>%
-    mutate(Method = "Cocalibration") %>%
+    mutate(Method = "Cocalibration",
+           truecoefs = allout$truecoefs) %>%
     bind_rows(allout %>%
                 mutate(slabel = cocalibration_results$slabel,
                        Method = "cogxwalkr") %>%
@@ -652,3 +777,4 @@ sim_cwxco <- function(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2) {
   
   return(cwxco)
 }
+

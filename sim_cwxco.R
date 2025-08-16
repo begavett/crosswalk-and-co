@@ -69,14 +69,19 @@ ItemNames <- RecodedItemName_M %>%
   slice(useMemItems) %>%
   pull(RecodedItemName)
 
+# Run Serially  ---------------------------------------------------------
+
+# sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9)
 
 # Run in Parallel ---------------------------------------------------------
 
 iter_start <- 1
 niter <- 50
 iter_end <- iter_start + niter - 1
+sample_size <- 5002
+
 # set.seed(33333)
-# results <- replicate(niter, sim_cwxco(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2), 
+# results <- replicate(1, sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9),
 #                      simplify = FALSE)
 
 
@@ -87,12 +92,13 @@ handlers(global = TRUE)
 options(future.globals.maxSize = 1500*1024^2)
 
 # run the simulations in parallel
-with_progress({
+results <- with_progress({
   p <- progressor(along = iter_start:iter_end)
   
-  results <- future_Map(function(i) {
-    sim_cwxco(n_sample = 5002, prop_high_edu = .30, b = 0, b1 = .2)
-    p()  # Report progress
+  future_Map(function(i) {
+    res <- sim_cwxco(iter = i, N = sample_size, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9)
+    p()
+    res
   }, 
   i = iter_start:iter_end,
   future.seed = TRUE)
@@ -101,6 +107,9 @@ with_progress({
 # shut down parallelization
 plan(sequential)
 closeAllConnections()
+
+results_df <- rbindlist(results, idcol = "rep") %>%
+  mutate(n_sample = sample_size)
 
 # Cocalibrated models -----------------------------------------------------
 
