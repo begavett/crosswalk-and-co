@@ -73,17 +73,17 @@ ItemNames <- RecodedItemName_M %>%
 
 # sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9)
 
+# set.seed(33333)
+# results <- replicate(1, sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9),
+#                      simplify = FALSE)
+
+
 # Run in Parallel ---------------------------------------------------------
 
 iter_start <- 1
 niter <- 50
 iter_end <- iter_start + niter - 1
 sample_size <- 5002
-
-# set.seed(33333)
-# results <- replicate(1, sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9),
-#                      simplify = FALSE)
-
 
 plan(multisession, workers = 8)
 
