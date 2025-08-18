@@ -44,7 +44,7 @@
 library(pacman)
 p_load(dplyr, tidyr, magrittr, psych, mirt, data.table, ggplot2, readxl, 
        readr, stringr, simDAG, data.table, cogxwalkr, forcats,
-       future, future.apply, progressr)
+       future, future.apply, progressr, patchwork)
 
 user <- Sys.info()[["user"]]
 
@@ -116,10 +116,34 @@ results_df <- rbindlist(results, idcol = "rep") %>%
 if(file.exists("models/cc_models.Rds")) {
   cc_models <- readRDS("models/cc_models.Rds")
   
-  cc_models$cc1$mirt_rg %>% plot(type = "infoSE", main = "Scenario 1: No DIF + Strong Anchors")
-  cc_models$cc2$mirt_rg %>% plot(type = "infoSE", main = "Scenario 2: No DIF + Weak Anchors")
-  cc_models$cc3$mirt_rg %>% plot(type = "infoSE", main = "Scenario 3: Weak DIF + Strong Anchors")
-  cc_models$cc4$mirt_rg %>% plot(type = "infoSE", main = "Scenario 4: Strong DIF + Strong Anchors")
+  adj <- .06
+  
+  p1 <- cc_models$cc1$mirt_rg %>% 
+    testInfoPlot(adj_factor = adj) + 
+    scale_y_continuous(limits = c(0, 15), 
+                       sec.axis = sec_axis(~. * adj, name = expression(SE(theta)), breaks = c(0, .3, .6, .9))) +
+    ggtitle("Scenario 1", subtitle = "No DIF + Strong Anchors")
+  
+  p2 <- cc_models$cc2$mirt_rg %>% 
+    testInfoPlot(adj_factor = adj) + 
+    scale_y_continuous(limits = c(0, 15), 
+                       sec.axis = sec_axis(~. * adj, name = expression(SE(theta)), breaks = c(0, .3, .6, .9))) +
+    ggtitle("Scenario 2", subtitle = "No DIF + Weak Anchors")
+  
+  p3 <- cc_models$cc3$mirt_rg %>% 
+    testInfoPlot(adj_factor = adj) + 
+    scale_y_continuous(limits = c(0, 15), 
+                       sec.axis = sec_axis(~. * adj, name = expression(SE(theta)), breaks = c(0, .3, .6, .9))) +
+    ggtitle("Scenario 3", subtitle = "Weak DIF + Strong Anchors")
+  
+  p4 <- cc_models$cc4$mirt_rg %>% 
+    testInfoPlot(adj_factor = adj) + 
+    scale_y_continuous(limits = c(0, 15), 
+                       sec.axis = sec_axis(~. * adj, name = expression(SE(theta)), breaks = c(0, .3, .6, .9))) +
+    ggtitle("Scenario 4", subtitle = "Strong DIF + Strong Anchors")
+  
+  p1 + p2 + p3 + p4 + plot_layout(ncol = 2)
+
 }
 
 # source("summarize-results.R)

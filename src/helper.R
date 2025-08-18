@@ -746,19 +746,20 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
       coef(crswkoutlist[[scen]][[i]]$fit)*coef(edufits[[i]])["edu"]
     })
     
-    # BG added edufits2 2025-08-16 someone check this is right
-    
     edufits2 <- list(lm(score1 ~ edu, groupdatalist[[2]]),
                     lm(score2 ~ edu, groupdatalist[[1]]))
     
-    # BG added truecoefs 2025-08-16 someone check this is right
     truecoefs <- sapply(1:2, function(i)
     {
       coef(edufits2[[i]])["edu"]
     })
     
+    ## associations ignoring any kind of harmonization (just using whatever outcome we have)
+    naivecoefs <- c(coef(lm(score2 ~ edu, groupdatalist[[2]]))["edu"],
+                    coef(lm(score1 ~ edu, groupdatalist[[1]]))["edu"])
+    
     outdfs[[scen]] <- cbind.data.frame(scenario = scen, crosswalk_to = c("Group 2", "Group 1"),
-                                       coefs = coefs, truecoefs = truecoefs) # BG added truecoefs 2025-08-16 someone check this is right
+                                       coefs = coefs, truecoefs = truecoefs, naivecoefs = naivecoefs) 
   }
   allout <- do.call(rbind.data.frame, outdfs)
   
@@ -766,7 +767,8 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   
   cwxco <- cocalibration_results %>%
     mutate(Method = "Cocalibration",
-           truecoefs = allout$truecoefs) %>%
+           truecoefs = allout$truecoefs,
+           naivecoefs = allout$naivecoefs) %>%
     bind_rows(allout %>%
                 mutate(slabel = cocalibration_results$slabel,
                        Method = "cogxwalkr") %>%
