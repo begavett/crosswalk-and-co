@@ -18,8 +18,8 @@
 #   - R (>= 4.3)
 #   - Packages: dplyr, tidyr, magrittr, psych, mirt, data.table, ggplot2,
 #               readxl, readr, stringr, simDAG, cogxwalkr, forcats,
-#               future, future.apply, progressr
-#   - Local source files: helper.R
+#               future, future.apply, progressr, patchwork
+#   - Local source files: src/helper.R
 #   - External objects: models/dem_logr.Rds, data/b_m.xlsx, data/scenarios.csv,
 #                       data/RecodedItemName_m.csv
 #
@@ -44,7 +44,7 @@
 library(pacman)
 p_load(dplyr, tidyr, magrittr, psych, mirt, data.table, ggplot2, readxl, 
        readr, stringr, simDAG, data.table, cogxwalkr, forcats,
-       future, future.apply, progressr, patchwork)
+       future, future.apply, progressr, patchwork, ggmirt)
 
 user <- Sys.info()[["user"]]
 
@@ -74,7 +74,7 @@ ItemNames <- RecodedItemName_M %>%
 # sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9)
 
 # set.seed(33333)
-# results <- replicate(1, sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9),
+# results <- replicate(2, sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9),
 #                      simplify = FALSE)
 
 

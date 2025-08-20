@@ -425,7 +425,7 @@ simCog <- function(itempars, itemnames, prop_high_edu = .3, b0 = 0, b1 = .2, n_s
                                  itemtype = itemtypes,
                                  Theta = data.matrix(thetas)) %>%
     as_tibble() %>%
-    set_names(ItemNames)
+    set_names(itemnames)
   
   cog_mirt <- mirt(data = sim_item_resp, model = paste0(cogname, ' = 1-', ncol(sim_item_resp)),
                    itemtype = "graded",
