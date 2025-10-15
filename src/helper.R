@@ -799,10 +799,10 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   
   # psych::describeBy(mem_fscores, mem_fscores$Group)
   
-  ggplot(mem_fscores, aes(x = Mem_FS, y = S1_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
-  ggplot(mem_fscores, aes(x = Mem_FS, y = S2_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
-  ggplot(mem_fscores, aes(x = Mem_FS, y = S3_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
-  ggplot(mem_fscores, aes(x = Mem_FS, y = S4_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+  # ggplot(mem_fscores, aes(x = Mem_FS, y = S1_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+  # ggplot(mem_fscores, aes(x = Mem_FS, y = S2_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+  # ggplot(mem_fscores, aes(x = Mem_FS, y = S3_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+  # ggplot(mem_fscores, aes(x = Mem_FS, y = S4_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
   
   
   # Run regression models on cocalibrated scores -------------------------------------
