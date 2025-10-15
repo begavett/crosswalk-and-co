@@ -40,7 +40,8 @@
 cocalibrate <- function(rg_dat, 
                         fg_dat, 
                         rg_items,
-                        fg_items) {
+                        fg_items,
+                        rg_num) {
   
   library(mirt)
   library(dplyr)
@@ -120,10 +121,17 @@ cocalibrate <- function(rg_dat,
   coef(mirt_rg, simplify = TRUE)
   coef(mirt_fg, simplify = TRUE)
   
-  fscores_rg <- data.frame(fscores(mirt_rg, full.scores.SE = TRUE)) %>%
-    mutate(Group = "Group 1")
-  fscores_fg <- data.frame(fscores(mirt_fg, full.scores.SE = TRUE)) %>%
-    mutate(Group = "Group 2")
+  if (rg_num == 1) {
+    fscores_rg <- data.frame(fscores(mirt_rg, full.scores.SE = TRUE)) %>%
+      mutate(Group = "Group 1")
+    fscores_fg <- data.frame(fscores(mirt_fg, full.scores.SE = TRUE)) %>%
+      mutate(Group = "Group 2")
+  } else if (rg_num == 2) {
+    fscores_rg <- data.frame(fscores(mirt_rg, full.scores.SE = TRUE)) %>%
+      mutate(Group = "Group 2")
+    fscores_fg <- data.frame(fscores(mirt_fg, full.scores.SE = TRUE)) %>%
+      mutate(Group = "Group 1")
+  }
   
   return(list(mirt_rg = mirt_rg, 
               mirt_fg = mirt_fg, 
@@ -170,7 +178,7 @@ cocalibrate <- function(rg_dat,
 #   - Relies on 'parameters::model_parameters()' for standardized extraction 
 #     of model results.
 
-cocalibrated_regressions <- function(scenario, factorscores = mem_fscores){
+cocalibrated_regressions <- function(scenario, factorscores = mem_fscores) {
   library(parameters)
   library(data.table)
   
@@ -552,7 +560,19 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   mem_fscores <- mem_fscores %>%
     mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
            Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
-  
+  # 
+  # ggplot(mem_fscores, aes(x = Mem_FS, y = DemProb, colour = Dementia)) +
+  #   geom_point()
+  # 
+  # ggplot(mem_fscores, aes(x = Mem_FS, group = Dementia, fill = Dementia)) +
+  #   geom_histogram(position = "dodge")
+  # 
+  # ggplot(mem_fscores, aes(x = theta, y = DemProb, colour = Dementia)) +
+  #   geom_point()
+  # 
+  # ggplot(mem_fscores, aes(x = theta, group = Dementia, fill = Dementia)) +
+  #   geom_histogram(position = "dodge")
+
   # psych::describe(mem_fscores %>%
   #                   select(theta, edu, Mem_FS, DemProb, Dementia))
   # 
@@ -590,59 +610,100 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   
   scenario_data1 <- scenario_data[[1]]
   
-  scenario_data1_rg <- scenario_data1 %>%
+  scenario_data1_g1 <- scenario_data1 %>%
     filter(Group == "Group 1") %>%
     data.frame()
   
-  scenario_data1_fg <- scenario_data1 %>%
+  scenario_data1_g2 <- scenario_data1 %>%
     filter(Group == "Group 2") %>%
     data.frame()
   
-  cc1 <- cocalibrate(rg_dat = scenario_data1_rg,
-                     fg_dat = scenario_data1_fg,
-                     rg_items = item_lists[[combos[s == 1 & g == 1, id]]],
-                     fg_items = item_lists[[combos[s == 1 & g == 2, id]]])
+  cc1_g1ref <- cocalibrate(rg_dat = scenario_data1_g1,
+                           fg_dat = scenario_data1_g2,
+                           rg_items = item_lists[[combos[s == 1 & g == 1, id]]],
+                           fg_items = item_lists[[combos[s == 1 & g == 2, id]]],
+                           rg_num = 1)
   
-  cc1_data <- bind_rows(cc1$fscores_rg %>%
-                          set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")), 
-                        cc1$fscores_fg %>%
-                          set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")))
+  cc1_g1ref_data <- bind_rows(cc1_g1ref$fscores_rg %>%
+                                set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")), 
+                              cc1_g1ref$fscores_fg %>%
+                                set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 1")
+  
+  cc1_g2ref <- cocalibrate(fg_dat = scenario_data1_g1,
+                           rg_dat = scenario_data1_g2,
+                           fg_items = item_lists[[combos[s == 1 & g == 1, id]]],
+                           rg_items = item_lists[[combos[s == 1 & g == 2, id]]],
+                           rg_num = 2)
+  
+  cc1_g2ref_data <- bind_rows(cc1_g2ref$fscores_fg %>%
+                                set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")),
+                              cc1_g2ref$fscores_rg %>%
+                                set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 2")
   
   # psych::describeBy(cc1_data, cc1_data$Group)
   
+  # cc1_mem_g1 <- bind_cols(mem_fscores, cc1_g1ref_data %>% select(-Group))
+  # cc1_mem_g2 <- bind_cols(mem_fscores, cc1_g2ref_data %>% select(-Group))
+  # 
+  # ggplot(cc1_mem_g1, aes(x = Mem_FS, y = S1_Mem_FS)) + geom_point()
+  # ggplot(cc1_mem_g2, aes(x = Mem_FS, y = S1_Mem_FS)) + geom_point()
   
-  mem_fscores <- bind_cols(mem_fscores, cc1_data %>% select(-Group))
+  mem_fscores <- bind_cols(bind_rows(mem_fscores, mem_fscores),
+                           bind_rows(cc1_g1ref_data %>% select(-Group), 
+                                     cc1_g2ref_data %>% select(-Group)))
   
-  # psych::describeBy(mem_fscores, mem_fscores$Group)
-  
+  # psych::describeBy(mem_fscores %>% filter(Reference == "Group 1"), 
+  #                   mem_fscores %>% filter(Reference == "Group 1") %>% pull(Group))
+  # 
+  # psych::describeBy(mem_fscores %>% filter(Reference == "Group 2"), 
+  #                   mem_fscores %>% filter(Reference == "Group 2") %>% pull(Group))
+  # 
   
   
   # Scenario 2 --------------------------------------------------------------
   
   scenario_data2 <- scenario_data[[2]]
   
-  scenario_data2_rg <- scenario_data2 %>%
+  scenario_data2_g1 <- scenario_data2 %>%
     filter(Group == "Group 1") %>%
     data.frame()
   
-  scenario_data2_fg <- scenario_data2 %>%
+  scenario_data2_g2 <- scenario_data2 %>%
     filter(Group == "Group 2") %>%
     data.frame()
   
-  cc2 <- cocalibrate(rg_dat = scenario_data2_rg,
-                     fg_dat = scenario_data2_fg,
-                     rg_items = item_lists[[combos[s == 2 & g == 1, id]]],
-                     fg_items = item_lists[[combos[s == 2 & g == 2, id]]])
+  cc2_g1ref <- cocalibrate(rg_dat = scenario_data2_g1,
+                           fg_dat = scenario_data2_g2,
+                           rg_items = item_lists[[combos[s == 2 & g == 1, id]]],
+                           fg_items = item_lists[[combos[s == 2 & g == 2, id]]],
+                           rg_num = 1)
   
-  cc2_data <- bind_rows(cc2$fscores_rg %>%
-                          set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")), 
-                        cc2$fscores_fg %>%
-                          set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")))
+  cc2_g1ref_data <- bind_rows(cc2_g1ref$fscores_rg %>%
+                                set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")), 
+                              cc2_g1ref$fscores_fg %>%
+                                set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 1")
+  
+  cc2_g2ref <- cocalibrate(fg_dat = scenario_data2_g1,
+                           rg_dat = scenario_data2_g2,
+                           fg_items = item_lists[[combos[s == 2 & g == 1, id]]],
+                           rg_items = item_lists[[combos[s == 2 & g == 2, id]]],
+                           rg_num = 2)
+  
+  cc2_g2ref_data <- bind_rows(cc2_g2ref$fscores_fg %>%
+                                set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")), 
+                              cc2_g2ref$fscores_rg %>%
+                                set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 2")
   
   # psych::describeBy(cc2_data, cc2_data$Group)
   
   
-  mem_fscores <- bind_cols(mem_fscores, cc2_data %>% select(-Group))
+  mem_fscores <- bind_cols(mem_fscores,
+                           bind_rows(cc2_g1ref_data %>% select(-Group, -Reference), 
+                                     cc2_g2ref_data %>% select(-Group, -Reference)))
   
   # psych::describeBy(mem_fscores, mem_fscores$Group)
   
@@ -651,28 +712,44 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   
   scenario_data3 <- scenario_data[[3]]
   
-  scenario_data3_rg <- scenario_data3 %>%
+  scenario_data3_g1 <- scenario_data3 %>%
     filter(Group == "Group 1") %>%
     data.frame()
   
-  scenario_data3_fg <- scenario_data3 %>%
+  scenario_data3_g2 <- scenario_data3 %>%
     filter(Group == "Group 2") %>%
     data.frame()
   
-  cc3 <- cocalibrate(rg_dat = scenario_data3_rg,
-                     fg_dat = scenario_data3_fg,
-                     rg_items = item_lists[[combos[s == 3 & g == 1, id]]],
-                     fg_items = item_lists[[combos[s == 3 & g == 2, id]]])
+  cc3_g1ref <- cocalibrate(rg_dat = scenario_data3_g1,
+                           fg_dat = scenario_data3_g2,
+                           rg_items = item_lists[[combos[s == 3 & g == 1, id]]],
+                           fg_items = item_lists[[combos[s == 3 & g == 2, id]]],
+                           rg_num = 1)
   
-  cc3_data <- bind_rows(cc3$fscores_rg %>%
-                          set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")), 
-                        cc3$fscores_fg %>%
-                          set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")))
+  cc3_g1ref_data <- bind_rows(cc3_g1ref$fscores_rg %>%
+                                set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")), 
+                              cc3_g1ref$fscores_fg %>%
+                                set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 1")
+  
+  cc3_g2ref <- cocalibrate(fg_dat = scenario_data3_g1,
+                           rg_dat = scenario_data3_g2,
+                           fg_items = item_lists[[combos[s == 3 & g == 1, id]]],
+                           rg_items = item_lists[[combos[s == 3 & g == 2, id]]],
+                           rg_num = 2)
+  
+  cc3_g2ref_data <- bind_rows(cc3_g2ref$fscores_fg %>%
+                                set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")), 
+                              cc3_g2ref$fscores_rg %>%
+                                set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 2")
   
   # psych::describeBy(cc3_data, cc3_data$Group)
   
   
-  mem_fscores <- bind_cols(mem_fscores, cc3_data %>% select(-Group))
+  mem_fscores <- bind_cols(mem_fscores,
+                           bind_rows(cc3_g1ref_data %>% select(-Group, -Reference), 
+                                     cc3_g2ref_data %>% select(-Group, -Reference)))
   
   # psych::describeBy(mem_fscores, mem_fscores$Group)
   
@@ -681,39 +758,68 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   
   scenario_data4 <- scenario_data[[4]]
   
-  scenario_data4_rg <- scenario_data4 %>%
+  scenario_data4_g1 <- scenario_data4 %>%
     filter(Group == "Group 1") %>%
     data.frame()
   
-  scenario_data4_fg <- scenario_data4 %>%
+  scenario_data4_g2 <- scenario_data4 %>%
     filter(Group == "Group 2") %>%
     data.frame()
   
-  cc4 <- cocalibrate(rg_dat = scenario_data4_rg,
-                     fg_dat = scenario_data4_fg,
-                     rg_items = item_lists[[combos[s == 4 & g == 1, id]]],
-                     fg_items = item_lists[[combos[s == 4 & g == 2, id]]])
+  cc4_g1ref <- cocalibrate(rg_dat = scenario_data4_g1,
+                           fg_dat = scenario_data4_g2,
+                           rg_items = item_lists[[combos[s == 4 & g == 1, id]]],
+                           fg_items = item_lists[[combos[s == 4 & g == 2, id]]],
+                           rg_num = 1)
   
-  cc4_data <- bind_rows(cc4$fscores_rg %>%
-                          set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")), 
-                        cc4$fscores_fg %>%
-                          set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")))
+  cc4_g1ref_data <- bind_rows(cc4_g1ref$fscores_rg %>%
+                                set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")), 
+                              cc4_g1ref$fscores_fg %>%
+                                set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 1")
+  
+  cc4_g2ref <- cocalibrate(fg_dat = scenario_data4_g1,
+                           rg_dat = scenario_data4_g2,
+                           fg_items = item_lists[[combos[s == 4 & g == 1, id]]],
+                           rg_items = item_lists[[combos[s == 4 & g == 2, id]]],
+                           rg_num = 2)
+  
+  cc4_g2ref_data <- bind_rows(cc4_g2ref$fscores_fg %>%
+                                set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")), 
+                              cc4_g2ref$fscores_rg %>%
+                                set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group"))) %>%
+    mutate(Reference = "Group 2")
   
   # psych::describeBy(cc4_data, cc4_data$Group)
   
   
-  mem_fscores <- bind_cols(mem_fscores, cc4_data %>% select(-Group))
+  mem_fscores <- bind_cols(mem_fscores,
+                           bind_rows(cc4_g1ref_data %>% select(-Group, -Reference), 
+                                     cc4_g2ref_data %>% select(-Group, -Reference)))
   
   # psych::describeBy(mem_fscores, mem_fscores$Group)
   
+  ggplot(mem_fscores, aes(x = Mem_FS, y = S1_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+  ggplot(mem_fscores, aes(x = Mem_FS, y = S2_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+  ggplot(mem_fscores, aes(x = Mem_FS, y = S3_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+  ggplot(mem_fscores, aes(x = Mem_FS, y = S4_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
   
   
   # Run regression models on cocalibrated scores -------------------------------------
   
   
   
-  cocalibration_results <- rbindlist(lapply(1:combos[, max(s)], cocalibrated_regressions, factorscores = mem_fscores))
+  cocalibration_results_g1ref <- rbindlist(lapply(1:combos[, max(s)], 
+                                                  cocalibrated_regressions, 
+                                                  factorscores = mem_fscores %>%
+                                                    filter(Reference == "Group 1"))) %>%
+    mutate(cc_rg = "Group 1")
   
+  cocalibration_results_g2ref <- rbindlist(lapply(1:combos[, max(s)], 
+                                                  cocalibrated_regressions, 
+                                                  factorscores = mem_fscores %>%
+                                                    filter(Reference == "Group 2"))) %>%
+    mutate(cc_rg = "Group 2")
   
   # x <- ggplot(mem_fscores, aes(x = edu, y = S2_Mem_FS)) + 
   #   geom_jitter() + 
@@ -747,7 +853,7 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
     })
     
     edufits2 <- list(lm(score1 ~ edu, groupdatalist[[2]]),
-                    lm(score2 ~ edu, groupdatalist[[1]]))
+                     lm(score2 ~ edu, groupdatalist[[1]]))
     
     truecoefs <- sapply(1:2, function(i)
     {
@@ -765,16 +871,32 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   
   # cocalibration_results
   
-  cwxco <- cocalibration_results %>%
+  cwxco <- cocalibration_results_g1ref %>%
     mutate(Method = "Cocalibration",
            truecoefs = allout$truecoefs,
            naivecoefs = allout$naivecoefs) %>%
+    bind_rows(cocalibration_results_g2ref %>%
+                mutate(Method = "Cocalibration",
+                       truecoefs = allout$truecoefs,
+                       naivecoefs = allout$naivecoefs)) %>%
     bind_rows(allout %>%
-                mutate(slabel = cocalibration_results$slabel,
+                mutate(slabel = cocalibration_results_g1ref$slabel,
                        Method = "cogxwalkr") %>%
                 rename(coef = coefs))
   
-  cc_models <- list(cc1 = cc1, cc2 = cc2, cc3 = cc3, cc4 = cc4)
+  # cwxco_g2ref <- cocalibration_results_g2ref %>%
+  #   mutate(Method = "Cocalibration",
+  #          truecoefs = allout$truecoefs,
+  #          naivecoefs = allout$naivecoefs) %>%
+  #   bind_rows(allout %>%
+  #               mutate(slabel = cocalibration_results_g2ref$slabel,
+  #                      Method = "cogxwalkr") %>%
+  #               rename(coef = coefs))
+  # 
+  # cwxco <- bind_rows(cwxco_g1ref, cwxco_g2ref)
+  
+  cc_models <- list(cc1_g1ref = cc1_g1ref, cc2_g1ref = cc2_g1ref, cc3_g1ref = cc3_g1ref, cc4_g1ref = cc4_g1ref,
+                    cc1_g2ref = cc1_g2ref, cc2_g2ref = cc2_g2ref, cc3_g2ref = cc3_g2ref, cc4_g2ref = cc4_g2ref)
   if(!file.exists("models/cc_models.Rds")) saveRDS(cc_models, "models/cc_models.Rds")
   
   return(cwxco)

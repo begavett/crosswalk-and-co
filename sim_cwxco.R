@@ -4,7 +4,7 @@
 # Authors       : Brandon Gavett, Emma Nichols, Nathan Ryder
 # Collaborators : Hoda Abdel Magid, Sarah Forrester, Xiaqing Jiang, Katrina Kezios, Adina Zeki Al Hazzouri 
 # Created       : 2025-08-12
-# Modified      : 2025-08-16
+# Modified      : 2025-10-15
 # Version       : 1.0
 #
 # Description:
@@ -71,7 +71,7 @@ ItemNames <- RecodedItemName_M %>%
 
 # Run Serially  ---------------------------------------------------------
 
-# sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9)
+# sim_cwxco(N = 1001, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9)
 
 # set.seed(33333)
 # results <- replicate(2, sim_cwxco(N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9),
@@ -81,9 +81,9 @@ ItemNames <- RecodedItemName_M %>%
 # Run in Parallel ---------------------------------------------------------
 
 iter_start <- 1
-niter <- 50
+niter <- 1000
 iter_end <- iter_start + niter - 1
-sample_size <- 5002
+sample_size <- 1002
 
 plan(multisession, workers = 8)
 
@@ -146,4 +146,4 @@ if(file.exists("models/cc_models.Rds")) {
 
 }
 
-# source("summarize-results.R)
+# source("summarize-results.R")
