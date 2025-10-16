@@ -414,7 +414,7 @@ simCog <- function(itempars, itemnames, prop_high_edu = .3, b0 = 0, b1 = .2, n_s
     mutate(itemtype = ifelse(nThresh == 1, "dich", "graded")) %>%
     pull(itemtype)
   
-  edu <- rbernoulli(n_sample, p = prop_high_edu, output = "numeric")
+  edu <- simDAG::rbernoulli(n_sample, p = prop_high_edu, output = "numeric")
   var_edu <- prop_high_edu * (1 - prop_high_edu)
   sigma2 <- 1 - (b1^2 * var_edu)
   sigma <- sqrt(sigma2)
@@ -499,6 +499,8 @@ simCog <- function(itempars, itemnames, prop_high_edu = .3, b0 = 0, b1 = .2, n_s
 
 sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9) {
   
+  library(purrr)
+  
   set.seed(iter)
   
   # Group 1 -----------------------------------------------------------------
@@ -549,6 +551,47 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
                            cogname = "Mem", 
                            groupname = "Group 2")
   
+  # Group 3 -----------------------------------------------------------------
+  
+  Loadings_M_G3 <- tibble(
+    a = map2_dbl(Loadings_M_G1$a, Loadings_M_G2$a, function(x, y) {
+      if (is.na(x) && is.na(y)) return(NA_real_)
+      if (is.na(x)) return(y)
+      if (is.na(y)) return(x)
+      # both present — randomly pick one
+      sample(c(x, y), 1)
+    })
+  )
+  
+  Thresholds_M_G3 <- map2_dfr(
+    split(Thresholds_M_G1, seq_len(nrow(Thresholds_M_G1))),
+    split(Thresholds_M_G2 %>% set_names(paste0("b", 1:ncol(.))), seq_len(nrow(Thresholds_M_G2))),
+    ~ {
+      all_na1 <- all(is.na(.x))
+      all_na2 <- all(is.na(.y))
+      
+      if (all_na1 && all_na2) return(NULL)  # drop both missing
+      if (all_na1) return(.y)
+      if (all_na2) return(.x)
+      
+      # both have some non-NA: randomly pick one
+      if (runif(1) < 0.5) .x else .y
+    }
+  )
+  
+  item_pars_M_G3 <- traditional2mirt(bind_cols(Loadings_M_G3, Thresholds_M_G3), 
+                                     "graded", 
+                                     ncat = ncol(Thresholds_M_G3) + 1)
+  
+  mem_fscores_G3 <- simCog(itempars = item_pars_M_G3, 
+                           itemnames = ItemNames, 
+                           prop_high_edu = prop_high_edu, 
+                           b0 = b0, 
+                           b1 = b1, 
+                           n_sample = N, 
+                           cogname = "Mem", 
+                           groupname = "Group 3")
+  
   
   # Combine -----------------------------------------------------------------
   
@@ -560,6 +603,11 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   mem_fscores <- mem_fscores %>%
     mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
            Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
+  
+  mem_fscores_g3 <- mem_fscores_G3 %>%
+    mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
+           Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
+  
   # 
   # ggplot(mem_fscores, aes(x = Mem_FS, y = DemProb, colour = Dementia)) +
   #   geom_point()
@@ -572,7 +620,7 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   # 
   # ggplot(mem_fscores, aes(x = theta, group = Dementia, fill = Dementia)) +
   #   geom_histogram(position = "dodge")
-
+  
   # psych::describe(mem_fscores %>%
   #                   select(theta, edu, Mem_FS, DemProb, Dementia))
   # 
