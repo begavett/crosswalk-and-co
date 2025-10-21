@@ -185,6 +185,7 @@ summarize_sims <- function(outfilename,
   }
   plot(p)
   return(results_df %>%
+           select(-rep) %>%
            group_by(scenario, crosswalk_to, slabel, cc_rg, Method, n_sample, b1) %>%
            summarise(across(everything(), mean),
                      .groups = "drop"))
@@ -194,7 +195,7 @@ summarize_sims <- function(outfilename,
 
 
 
-summarize_sims(outfilename = "allresn5000_d2.Rds",
+summarize_sims(outfilename = "allresn5000_d1.Rds",
                ref_grp = 1, 
                plot_type = "boxplot",
                vs = "target")
