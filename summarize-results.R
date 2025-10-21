@@ -72,7 +72,7 @@ summarize_sims <- function(outfilename,
   
   results_df <- res %>%
     filter(cc_rg == paste0("Group ", ref_grp) | Method == "cogxwalkr") %>%
-    mutate(bias = coef - beta1,
+    mutate(bias = coef - b1,
            bias2 = coef - truecoefs,
            slabel = fct_inorder(slabel),
            Method = case_when(Method == "Crosswalk" ~ "cogxwalkr",
