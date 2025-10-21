@@ -1,195 +1,200 @@
-# ------------------------------------------------------------------------------
-# Simulation Results Visualization Script
+###############################################################################
+# Simulation Results Summary and Plotting Script
 #
-# Description:
-#   This script loads simulation results from RDS files and generates plots
-#   to evaluate bias in regression coefficient estimates under different
-#   crosswalking methods, sample sizes, and scenarios.
+# Purpose:
+#   This script loads simulation results from RDS files, computes bias metrics
+#   relative to either the true coefficient or a target coefficient, and 
+#   generates publication-ready plots (boxplots or barplots) comparing methods
+#   across scenarios and target groups.
 #
-# Data Inputs:
-#   - allres5002.RDS : Results from simulations with sample size N = 5,002
-#   - allres1002.RDS : Results from simulations with sample size N = 1,002
+# Libraries:
+#   - pacman: for easy package loading
+#   - magrittr: for piping (%>%)
+#   - dplyr: for data manipulation
+#   - forcats: for factor level manipulation
+#   - ggplot2: for plotting
+#   - tidyr: for data reshaping
+#   - patchwork: for combining ggplots
 #
-# Process:
-#   1. Load results and create derived variables:
-#        * bias  = estimated coefficient - 0.2 (true effect size)
-#        * bias2 = estimated coefficient - truecoefs (scenario-specific target)
-#        * relabel "Crosswalk" method to "cogxwalkr" for clarity
-#   2. For each dataset (N = 5002 and N = 1002):
-#        * Plot distribution of bias vs. truth
-#        * Plot distribution of bias vs. target coefficient
-#   3. For N = 1002 specifically:
-#        * Compute and plot mean bias ± 1 SE across scenarios, by method
+# Main Function:
+#   summarize_sims(outfilename, ref_grp = 1, plot_type = c("boxplot", "barplot"),
+#                  vs = c("truth", "target"))
 #
-# Outputs:
-#   - Boxplots of bias by scenario, method, and target group
-#   - Barplots with error bars showing mean bias across replications
+# Arguments:
+#   outfilename : character
+#       Name of the RDS file containing simulation results.
+#   ref_grp     : integer (1 or 2)
+#       Reference group used for cocalibration.
+#   plot_type   : character
+#       Type of plot to generate. Options: "boxplot" (individual iteration
+#       results) or "barplot" (mean ± SE across iterations).
+#   vs          : character
+#       Comparison reference. Options: "truth" (compare to true coefficient)
+#       or "target" (compare to target coefficient).
 #
-# Key Variables:
-#   - coef       : estimated regression coefficient
-#   - truecoefs  : scenario-specific target coefficient
-#   - rep        : replication ID
-#   - slabel     : scenario label
-#   - Method     : estimation method (e.g., cogxwalkr, etc.)
-#   - crosswalk_to : target group for crosswalk
+# Output:
+#   - Generates a ggplot showing bias by scenario, method, and target group.
+#   - Returns a summarized data frame with mean values across iterations.
+#
+# Usage:
+#   # Boxplot of bias vs. true coefficient with Group 1 as reference
+#   summarize_sims("allresn5000_d1.Rds", ref_grp = 1, plot_type = "boxplot", vs = "truth")
 #
 # Notes:
-#   - Bias is evaluated relative to both the "true" value (0.2) 
-#     and the scenario-specific target coefficient.
-#   - Iteration counts (niter) are automatically included in plot subtitles.
-#   - Uses ggplot2 for visualization and viridis color scale for accessibility.
-# ------------------------------------------------------------------------------
-
+#   - The script assumes RDS files are located in `file.path(code_dir, "data")`.
+#   - Bias is computed as difference between estimated coefficients and
+#     either the true coefficient or the target coefficient.
+#   - Plots use viridis color scales and facet_wrap by scenario label.
+#   - Horizontal red dashed line indicates zero bias.
+##########################################################
 
 library(pacman)
-p_load(magrittr, dplyr, forcats, ggplot2, tidyr)
+p_load(magrittr, dplyr, forcats, ggplot2, tidyr, patchwork)
 
-# N = 5002 ----------------------------------------------------------------
-allres5002 <- readRDS("~/Dropbox/Projects/crosswalk-and-co/data/allres5002.RDS")
+user <- Sys.info()[["user"]]
 
-results_df <- allres5002 %>%
-  mutate(bias = coef - .2,
-         bias2 = coef - truecoefs,
-         slabel = fct_inorder(slabel),
-         Method = case_when(Method == "Crosswalk" ~ "cogxwalkr",
-                            TRUE ~ Method))
-
-niter <- length(unique(results_df$rep))
+if (user == "brandon") {
+  code_dir <- "~/Dropbox/Projects/crosswalk-and-co/"
+} else if (user == "emmanich") {
+  code_dir <- "C:/Users/emmanich/code/crosswalk-and-co/"
+}
 
 
-## Bias vs. Truth ----------------------------------------------------------
+summarize_sims <- function(outfilename, 
+                           ref_grp = 1, 
+                           plot_type = c("boxplot", "barplot"),
+                           vs = c("truth", "target")) {
+  
+  res <- readRDS(file.path(code_dir, "data", outfilename))
+  beta1 <- first(res$b1)
+  plot_type <- match.arg(plot_type)
+  vs <- match.arg(vs)
+  
+  results_df <- res %>%
+    filter(cc_rg == paste0("Group ", ref_grp) | Method == "cogxwalkr") %>%
+    mutate(bias = coef - beta1,
+           bias2 = coef - truecoefs,
+           slabel = fct_inorder(slabel),
+           Method = case_when(Method == "Crosswalk" ~ "cogxwalkr",
+                              TRUE ~ Method))
+  
+  niter <- length(unique(results_df$rep))
+  
+  
+  if (plot_type == "boxplot") {
+    
+    if(vs == "truth") {
+      ## Bias vs. Truth ----------------------------------------------------------
+      
+      p <- results_df %>%
+        ggplot(aes(x = crosswalk_to, y = bias, fill = Method)) +
+        geom_boxplot(notch = TRUE) +
+        facet_wrap(~slabel) +
+        ylab("Bias") +
+        xlab("Target Group") +
+        theme_bw() +
+        theme(legend.position = "bottom") +
+        ggtitle(paste0("Bias (vs. Truth) by Scenario, Method, and Target Group (\u03B2 = ", beta1, ")"),
+                subtitle = paste0("Results from ", niter, " iterations, each iteration N = ", first(results_df$n_sample))) +
+        scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
+        scale_y_continuous(limits = c(min(min(results_df$bias), min(results_df$bias2)), max(max(results_df$bias), max(results_df$bias2))), n.breaks = 6) +
+        geom_hline(yintercept = 0, colour = "red", lty = 2) +
+        plot_annotation(caption = paste0("Group ", ref_grp, " was the reference group for cocalibration"))
+      
+    } else if (vs == "target") {
+      
+      ## Bias vs. Target ----------------------------------------------------------
+      
+      p <- results_df %>%
+        ggplot(aes(x = crosswalk_to, y = bias2, fill = Method)) +
+        geom_boxplot(notch = TRUE) +
+        facet_wrap(~slabel) +
+        ylab("Bias") +
+        xlab("Target Group") +
+        theme_bw() +
+        theme(legend.position = "bottom") +
+        ggtitle(paste0("Bias (vs. Target Coefficient) by Scenario, Method, and Target Group (\u03B2 = ", beta1, ")"),
+                subtitle = paste0("Results from ", niter, " iterations, each iteration N = ", first(results_df$n_sample))) +
+        scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
+        scale_y_continuous(limits = c(min(min(results_df$bias), min(results_df$bias2)), max(max(results_df$bias), max(results_df$bias2))), n.breaks = 6) +
+        geom_hline(yintercept = 0, colour = "red", lty = 2) +
+        plot_annotation(caption = paste0("Group ", ref_grp, " was the reference group for cocalibration"))
+    }
+  } else if (plot_type == "barplot") {
+    
+    if (vs == "truth") {
+      
+      ## Mean Bias vs. Truth ----------------------------------------------------------
+      
+      p <- results_df %>%
+        select(crosswalk_to, slabel, Method, n_sample, bias, bias2) %>%
+        pivot_longer(cols = c(bias, bias2)) %>%
+        mutate(name = case_when(name == "bias" ~ "Bias vs. True",
+                                name == "bias2" ~ "Bias vs. Target"),
+               slabel = fct_inorder(slabel)) %>%
+        filter(name == "Bias vs. True") %>%
+        ggplot(aes(x = crosswalk_to, y = value, fill = Method)) +
+        stat_summary(fun = mean,
+                     geom = "bar",
+                     position = position_dodge(width = 0.9)) +
+        stat_summary(fun.data = mean_se,
+                     geom = "errorbar",
+                     position = position_dodge(width = 0.9),
+                     width = 0.2) +
+        facet_wrap(~ slabel) +
+        xlab("Target Group") +
+        theme_bw() +
+        theme(legend.position = "bottom") +
+        ggtitle(paste0("Mean Bias (vs. True) by Scenario, Method, and Target Group (\u03B2 = ", beta1, ")"),
+                subtitle = paste0("Results from ", niter, " iterations, each iteration N = ", first(results_df$n_sample))) +
+        scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
+        ylab("Mean Bias (± 1 SE)") +
+        geom_hline(yintercept = 0, colour = "red", lty = 2) +
+        plot_annotation(caption = paste0("Group ", ref_grp, " was the reference group for cocalibration"))
+      
+    } else if (vs == "target") {
+      
+      ## Mean Bias vs. Target ----------------------------------------------------------
+      
+      p <- results_df %>%
+        select(crosswalk_to, slabel, Method, n_sample, bias, bias2) %>%
+        pivot_longer(cols = c(bias, bias2)) %>%
+        mutate(name = case_when(name == "bias" ~ "Bias vs. True",
+                                name == "bias2" ~ "Bias vs. Target"),
+               slabel = fct_inorder(slabel)) %>%
+        filter(name == "Bias vs. Target") %>%
+        ggplot(aes(x = crosswalk_to, y = value, fill = Method)) +
+        stat_summary(fun = mean,
+                     geom = "bar",
+                     position = position_dodge(width = 0.9)) +
+        stat_summary(fun.data = mean_se,
+                     geom = "errorbar",
+                     position = position_dodge(width = 0.9),
+                     width = 0.2) +
+        facet_wrap(~ slabel) +
+        xlab("Target Group") +
+        theme_bw() +
+        theme(legend.position = "bottom") +
+        ggtitle(paste0("Mean Bias (vs. Target) by Scenario, Method, and Target Group (\u03B2 = ", beta1, ")"),
+                subtitle = paste0("Results from ", niter, " iterations, each iteration N = ", first(results_df$n_sample))) +
+        scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
+        ylab("Mean Bias (± 1 SE)") +
+        geom_hline(yintercept = 0, colour = "red", lty = 2) +
+        plot_annotation(caption = paste0("Group ", ref_grp, " was the reference group for cocalibration"))
+    }
+  }
+  plot(p)
+  return(results_df %>%
+           group_by(scenario, crosswalk_to, slabel, cc_rg, Method, n_sample, b1) %>%
+           summarise(across(everything(), mean),
+                     .groups = "drop"))
+}
 
-results_df %>%
-  ggplot(aes(x = crosswalk_to, y = bias, fill = Method)) +
-  geom_boxplot(notch = TRUE) +
-  facet_wrap(~slabel) +
-  ylab("Bias") +
-  xlab("Target Group") +
-  theme_bw() +
-  theme(legend.position = "bottom") +
-  ggtitle("Bias (vs. Truth) by Scenario, Method, and Target Group",
-          subtitle = paste0("Results from ", niter, " iterations, each iteration N = 5,002")) +
-  scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-  scale_y_continuous(limits = c(-.3, .3), n.breaks = 6) +
-  geom_hline(yintercept = 0, colour = "red", lty = 2)
-
-## Bias vs. Target ----------------------------------------------------------
-
-results_df %>%
-  ggplot(aes(x = crosswalk_to, y = bias2, fill = Method)) +
-  geom_boxplot(notch = TRUE) +
-  facet_wrap(~slabel) +
-  ylab("Bias") +
-  xlab("Target Group") +
-  theme_bw() +
-  theme(legend.position = "bottom") +
-  ggtitle("Bias (vs. Target Coefficient) by Scenario, Method, and Target Group",
-          subtitle = paste0("Results from ", niter, " iterations, each iteration N = 5,002")) +
-  scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-  scale_y_continuous(limits = c(-.3, .3), n.breaks = 6) +
-  geom_hline(yintercept = 0, colour = "red", lty = 2)
 
 
-# N = 1002 ----------------------------------------------------------------
-
-allres1002 <- readRDS("~/Dropbox/Projects/crosswalk-and-co/data/allres1002.RDS")
-
-results_df <- allres1002 %>%
-  mutate(bias = coef - .2,
-         bias2 = coef - truecoefs,
-         slabel = fct_inorder(slabel),
-         Method = case_when(Method == "Crosswalk" ~ "cogxwalkr",
-                            TRUE ~ Method))
-
-niter <- length(unique(results_df$rep))
-
-## Bias vs. Truth ----------------------------------------------------------
-
-results_df %>%
-  ggplot(aes(x = crosswalk_to, y = bias, fill = Method)) +
-  geom_boxplot(notch = TRUE) +
-  facet_wrap(~slabel) +
-  ylab("Bias") +
-  xlab("Target Group") +
-  theme_bw() +
-  theme(legend.position = "bottom") +
-  ggtitle("Bias (vs. Truth) by Scenario, Method, and Target Group",
-          subtitle = paste0("Results from ", niter, " iterations, each iteration N = 1,002")) +
-  scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-  scale_y_continuous(limits = c(-.3, .3), n.breaks = 6) +
-  geom_hline(yintercept = 0, colour = "red", lty = 2)
-
-## Bias vs. Target ----------------------------------------------------------
-
-results_df %>%
-  ggplot(aes(x = crosswalk_to, y = bias2, fill = Method)) +
-  geom_boxplot(notch = TRUE) +
-  facet_wrap(~slabel) +
-  ylab("Bias") +
-  xlab("Target Group") +
-  theme_bw() +
-  theme(legend.position = "bottom") +
-  ggtitle("Bias (vs. Target Coefficient) by Scenario, Method, and Target Group",
-          subtitle = paste0("Results from ", niter, " iterations, each iteration N = 1,002")) +
-  scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-  scale_y_continuous(limits = c(-.3, .3), n.breaks = 6) +
-  geom_hline(yintercept = 0, colour = "red", lty = 2)
 
 
-## Mean Bias vs. Truth ----------------------------------------------------------
-
-allres1002 %>%
-  mutate(bias = coef - .2, 
-         bias2 = coef - truecoefs) %>%
-  select(crosswalk_to, slabel, Method, n_sample, bias, bias2) %>%
-  pivot_longer(cols = c(bias, bias2)) %>%
-  mutate(name = case_when(name == "bias" ~ "Bias vs. True",
-                          name == "bias2" ~ "Bias vs. Target"),
-         slabel = fct_inorder(slabel)) %>%
-  filter(name == "Bias vs. True") %>%
-  ggplot(aes(x = crosswalk_to, y = value, fill = Method)) +
-  stat_summary(fun = mean,
-               geom = "bar",
-               position = position_dodge(width = 0.9)) +
-  stat_summary(fun.data = mean_se,
-               geom = "errorbar",
-               position = position_dodge(width = 0.9),
-               width = 0.2) +
-  facet_wrap(~ slabel) +
-  xlab("Target Group") +
-  theme_bw() +
-  theme(legend.position = "bottom") +
-  ggtitle("Mean Bias (vs. True) by Scenario, Method, and Target Group",
-          subtitle = paste0("Results from ", niter, " iterations, each iteration N = 1,002")) +
-  scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-  ylab("Mean Bias (± 1 SE)") +
-  geom_hline(yintercept = 0, colour = "red", lty = 2)
-
-## Mean Bias vs. Target ----------------------------------------------------------
-
-allres1002 %>%
-  mutate(bias = coef - .2, 
-         bias2 = coef - truecoefs) %>%
-  select(crosswalk_to, slabel, Method, n_sample, bias, bias2) %>%
-  pivot_longer(cols = c(bias, bias2)) %>%
-  mutate(name = case_when(name == "bias" ~ "Bias vs. True",
-                          name == "bias2" ~ "Bias vs. Target"),
-         slabel = fct_inorder(slabel)) %>%
-  filter(name == "Bias vs. Target") %>%
-  ggplot(aes(x = crosswalk_to, y = value, fill = Method)) +
-  stat_summary(fun = mean,
-               geom = "bar",
-               position = position_dodge(width = 0.9)) +
-  stat_summary(fun.data = mean_se,
-               geom = "errorbar",
-               position = position_dodge(width = 0.9),
-               width = 0.2) +
-  facet_wrap(~ slabel) +
-  xlab("Target Group") +
-  theme_bw() +
-  theme(legend.position = "bottom") +
-  ggtitle("Mean Bias (vs. Target) by Scenario, Method, and Target Group",
-          subtitle = paste0("Results from ", niter, " iterations, each iteration N = 1,002")) +
-  scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-  ylab("Mean Bias (± 1 SE)") +
-  geom_hline(yintercept = 0, colour = "red", lty = 2)
+summarize_sims(outfilename = "allresn5000_d2.Rds",
+               ref_grp = 1, 
+               plot_type = "boxplot",
+               vs = "target")
