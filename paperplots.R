@@ -55,7 +55,8 @@ alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(
 alldata <- alldata[!(Method == "Cocalibration" & !crosswalk_to == cc_rg)]
 
 ## define bias and other variables 
-alldata[, `:=` (bias_sim = coef-b1, bias_truth = coef-truecoefs, naive_diff = (naivecoefs-truecoefs) - (coef-truecoefs))]
+alldata[, `:=` (bias_sim = coef-b1, bias_truth = coef-truecoefs, naive_diff = abs(naivecoefs-truecoefs) - abs(coef-truecoefs), 
+                naivetrue_diff = naivecoefs - truecoefs)]
 alldata[Method == "cogxwalkr", Method := "Cogxwalkr"][, Method := factor(Method, levels = c("Cocalibration", "Cogxwalkr"))]
 alldata[, `:=` (slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.1", "ES 0.2")), 
                 crosswalk_to = factor(gsub("Group ", "G", crosswalk_to), levels = c("G1", "G2")))]
@@ -67,16 +68,14 @@ simsens_dt <- copy(alldata[rep >1000])
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
-## summarizing over group 1 and group 2 - no real difference - also can then show different effect sizes
-
-get_trueplot <- function(it){
-    data <- copy(maindata[n_sample == it])
-    lims <- c(maindata[, min(bias_sim)], maindata[, max(bias_sim)])
-    p <- ggplot(data, aes(x = x_factor, y = bias_sim, fill = Method)) +
+get_boxplot <- function(it, yvar = "bias_sim", dataset = maindata){
+    data <- copy(dataset[n_sample == it])
+    lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
+    p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = Method)) +
         geom_boxplot(notch = TRUE) +
         facet_wrap(~slabel, nrow = 1) +
         ylab("Bias") +
-        xlab("Target Group") +
+        xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
         scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
@@ -93,25 +92,7 @@ trueplot <- wrap_plots(trueplots) +
 
 # COMPARISONS TO TARGET COEFFICIENTS ---------------------------------------
 
-## summarizing over group 1 and group 2 - no real difference - also can then show different effect sizes
-
-get_targetplot <- function(it){
-    data <- copy(maindata[n_sample == it])
-    lims <- c(maindata[, min(bias_truth)], maindata[, max(bias_truth)])
-    p <- ggplot(data, aes(x = x_factor, y = bias_truth, fill = Method)) +
-        geom_boxplot(notch = TRUE) +
-        facet_wrap(~slabel, nrow = 1) +
-        ylab("Bias") +
-        xlab("Target Group") +
-        theme_bw() +
-        theme(legend.position = "bottom") +
-        scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-        scale_y_continuous(limits = lims, n.breaks = 6) +
-        geom_hline(yintercept = 0, colour = "red", lty = 2)
-    return(p)
-}
-
-targetplots <- lapply(c(500, 1000, 5000), function(n) get_targetplot(n))
+targetplots <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "bias_truth"))
 
 targetplot <- wrap_plots(targetplots) + 
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
@@ -121,9 +102,9 @@ targetplot <- wrap_plots(targetplots) +
 
 ## for a given iteration number and outcome 
 
-get_barplot <- function(yvar, it){
-    data <- copy(maindata[n_sample == it])
-    lims <- c(maindata[, min(get(yvar))], maindata[, max(get(yvar))])
+get_barplot <- function(yvar, it, dataset = maindata){
+    data <- copy(dataset[n_sample == it])
+    lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
     p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = Method)) +
         stat_summary(fun = mean,
                      geom = "bar",
@@ -133,7 +114,7 @@ get_barplot <- function(yvar, it){
                      position = position_dodge(width = 0.9),
                      width = 0.2) +
         facet_wrap(~ slabel, nrow = 1) +
-        xlab("Target Group") +
+        xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
         scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
@@ -160,5 +141,70 @@ barplot5000 <- wrap_plots(barplots5000) +
 
 # COMPARISON WITH MORE ITERATIONS -------------------------------------------------
 
-## FINISH THIS TOMORROW
+iteration_dt <- rbind(maindata[b1 == 0.2 & n_sample == 1000, .(slabel, crosswalk_to, Method, bias_sim, bias_truth, version = "1000 iterations")], 
+                      rbind(maindata[b1 == 0.2 & n_sample == 1000, .(slabel, crosswalk_to, Method, bias_sim, bias_truth, version = "2000 iterations")], 
+                            simsens_dt[b1 == 0.2 & n_sample == 1000, .(slabel, crosswalk_to, Method, bias_sim, bias_truth, version = "2000 iterations")]))
+iteration_dt[, method := factor(fcase(Method == "Cocalibration", "Cocal.", 
+                                        Method == "Cogxwalkr", "Cogx."), levels = c("Cocal.", "Cogx."))]
+iteration_dt[, x_factor := fct_cross(crosswalk_to, method, sep = " - ")]
+
+
+get_iterplot <- function(yvar){
+    data <- copy(iteration_dt)
+    lims <- c(iteration_dt[, min(get(yvar))], iteration_dt[, max(get(yvar))])
+    p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = as.factor(version))) +
+        geom_boxplot(notch = TRUE) +
+        facet_wrap(~slabel, nrow = 1) +
+        ylab("Bias") +
+        xlab("Condition") +
+        theme_bw() +
+        theme(legend.position = "bottom") +
+        scale_fill_viridis_d(option = "plasma", begin = .2, end = .8, name = "") +
+        scale_y_continuous(limits = lims, n.breaks = 6) +
+        geom_hline(yintercept = 0, colour = "red", lty = 2)
+    return(p)
+}
+
+iterplots <- lapply(c("bias_sim", "bias_truth"), function(y) get_iterplot(y))
+
+iterplot <- wrap_plots(iterplots) + 
+    plot_annotation(tag_levels = "A", tag_suffix = ".") +
+    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
+
+# NAIVE COMPARISON -----------------------------------------------------------
+
+naiveplots_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naive_diff") + ylab("Naive Bias - Estimated Bias"))
+
+naiveplot_box <- wrap_plots(naiveplots) + 
+    plot_annotation(tag_levels = "A", tag_suffix = ".") +
+    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
+
+naiveplots_bar <- lapply(c(500, 1000, 5000), function(n) get_barplot("naive_diff", n) + ylab("Naive Bias - Estimated Bias"))
+
+naiveplot_bar <- wrap_plots(naiveplots_bar) + 
+    plot_annotation(tag_levels = "A", tag_suffix = ".") +
+    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
+## reason why we see low means for cocalibration: 
+maindata[, .(min = min(naive_diff), max = max(naive_diff)), by = c("x_factor", "Method")]
+ggplot(maindata[Method == "Cocalibration" & n_sample == 1000 & x_factor == "G1 - ES 0.2"], aes(x = coef)) + geom_histogram(fill = "white", color = "black") + theme_bw()
+
+## boxplot for just cogxwalkr 
+naiveplots_cogx_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naive_diff", dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive Bias - Estimated Bias"))
+
+naiveplot_cogx_box <- wrap_plots(naiveplots_cogx_box) + 
+    plot_annotation(tag_levels = "A", tag_suffix = ".") +
+    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
+
+## barplot for just cogxwalkr
+naiveplots_cogx_bar <- lapply(c(500, 1000, 5000), function(n) get_barplot("naive_diff", n, dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive Bias - Estimated Bias"))
+
+naiveplot_cogx_bar <- wrap_plots(naiveplots_cogx_bar) + 
+    plot_annotation(tag_levels = "A", tag_suffix = ".") +
+    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
+
+## difference between naive and true effects (is this not really that big?)
+naivetrueplots_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naivetrue_diff", dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive - True Coefficient") + theme(legend.position = "none"))
+
+naivetrueplot_box <- wrap_plots(naivetrueplots_box) + 
+    plot_annotation(tag_levels = "A", tag_suffix = ".")
 
