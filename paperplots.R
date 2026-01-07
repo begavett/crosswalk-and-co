@@ -45,7 +45,7 @@ if (user == "brandon") {
 
 # LOAD FILES -----------------------------------------------------------
 
-files <- list.files(paste0(code_dir, "models/"), pattern = "allresn", full.names = TRUE)
+files <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_sum", full.names = TRUE)
 alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(file)))) 
 
 # FORMAT DATA -----------------------------------------------------------
@@ -58,7 +58,7 @@ alldata <- alldata[!(Method == "Cocalibration" & !crosswalk_to == cc_rg)]
 alldata[, `:=` (bias_sim = coef-b1, bias_truth = coef-truecoefs, naive_diff = abs(naivecoefs-truecoefs) - abs(coef-truecoefs), 
                 naivetrue_diff = naivecoefs - truecoefs)]
 alldata[Method == "cogxwalkr", Method := "Cogxwalkr"][, Method := factor(Method, levels = c("Cocalibration", "Cogxwalkr"))]
-alldata[, `:=` (slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.1", "ES 0.2")), 
+alldata[, `:=` (slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.2", "ES 0.4")), 
                 crosswalk_to = factor(gsub("Group ", "G", crosswalk_to), levels = c("G1", "G2")))]
 alldata[, x_factor := fct_cross(crosswalk_to, eslabel, sep = " - ")]
 
@@ -84,7 +84,7 @@ get_boxplot <- function(it, yvar = "bias_sim", dataset = maindata){
     return(p)
 }
 
-trueplots <- lapply(c(500, 1000, 5000), function(n) get_trueplot(n))
+trueplots <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naivetrue_diff"))
 
 trueplot <- wrap_plots(trueplots) + 
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
