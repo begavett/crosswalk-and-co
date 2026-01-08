@@ -140,12 +140,9 @@ ggsave(paste0(code_dir, "plots/barplots_otherdirection_", date, ".jpg"), barplot
 
 # COMPARISON WITH MORE ITERATIONS -------------------------------------------------
 
-iteration_dt <- rbind(maindata[b1 == 0.2 & n_sample == 1000, .(slabel, crosswalk_to, Method, bias_sim, bias_truth, version = "1000 iterations")], 
-                      rbind(maindata[b1 == 0.2 & n_sample == 1000, .(slabel, crosswalk_to, Method, bias_sim, bias_truth, version = "2000 iterations")], 
-                            simsens_dt[b1 == 0.2 & n_sample == 1000, .(slabel, crosswalk_to, Method, bias_sim, bias_truth, version = "2000 iterations")]))
-iteration_dt[, method := factor(fcase(Method == "Cocalibration", "Cocal.", 
-                                        Method == "Cogxwalkr", "Cogx."), levels = c("Cocal.", "Cogx."))]
-iteration_dt[, x_factor := fct_cross(crosswalk_to, method, sep = " - ")]
+it1000_dt <- copy(maindata[rep <= 1000]); it2000_dt <- copy(maindata)
+
+iteration_dt <- rbind(it1000_dt[, version := "1000 iterations"], it2000_dt[, version := "2000 iterations"])
 
 
 get_iterplot <- function(yvar){
@@ -153,7 +150,7 @@ get_iterplot <- function(yvar){
     lims <- c(iteration_dt[, min(get(yvar))], iteration_dt[, max(get(yvar))])
     p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = as.factor(version))) +
         geom_boxplot(notch = TRUE) +
-        facet_wrap(~slabel, nrow = 1) +
+        facet_wrap(~slabel+Method, nrow = 2) +
         ylab("Bias") +
         xlab("Condition") +
         theme_bw() +
@@ -166,9 +163,8 @@ get_iterplot <- function(yvar){
 
 iterplots <- lapply(c("bias_sim", "bias_truth"), function(y) get_iterplot(y))
 
-iterplot <- wrap_plots(iterplots) + 
-    plot_annotation(tag_levels = "A", tag_suffix = ".") +
-    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
+ggsave(paste0(code_dir, "plots/iterplot_sim_", date, ".jpg"), iterplots[[1]], width = 12, height = 8)
+
 
 # NAIVE COMPARISON -----------------------------------------------------------
 
