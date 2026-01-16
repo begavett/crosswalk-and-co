@@ -33,14 +33,18 @@
 ##########################################################
 
 library(pacman)
-p_load(magrittr, dplyr, forcats, ggplot2, tidyr, data.table, patchwork)
+p_load(magrittr, dplyr, forcats, ggplot2, tidyr, data.table, patchwork, ggtext)
 
 user <- Sys.info()[["user"]]
 
 if (user == "brandon") {
   code_dir <- "~/Dropbox/Projects/crosswalk-and-co/"
 } else if (user == "emmanich") {
-  code_dir <- "C:/Users/emmanich/code/crosswalk-and-co/"
+  if (Sys.info()[["sysname"]] == "Windows") {
+    code_dir <- "C:/Users/emmanich/code/crosswalk-and-co/"
+  } else {
+    code_dir <- "/Users/emmanich/code/crosswalk-and-co/"
+  }
 }
 
 date <- format(Sys.Date(), "%Y_%m_%d")
@@ -95,6 +99,15 @@ targetplot <- get_boxplot(yvar = "bias_truth", ylab = "Bias \n(estimate vs. targ
 
 ggsave(paste0(code_dir, "plots/bias_vs_targetcoef_", date, ".jpg"), targetplot, width = 14, height = 6)
 
+targetplot_aaic <- targetplot + 
+    ggtitle("**Figure 2.** Bias of cogxwalkr crosswalk and co-calibration methods across simulation replications.") +  
+    labs(caption = "Note: ES = effect size.") + 
+    theme(plot.caption.position = "plot", plot.title.position = "plot", 
+        plot.title = element_textbox_simple(),
+        plot.caption = element_textbox_simple(width = unit(1, "npc"), margin = margin(t = 10))) 
+
+ggsave(paste0(code_dir, "plots/bias_vs_targetcoef_aaic_", date, ".jpg"), targetplot_aaic, width = 12, height = 5)
+
 # BARPLOT COMPARISON --------------------------------------------------------------
 
 ## for a given iteration number and outcome 
@@ -127,6 +140,14 @@ barplot <- wrap_plots(barplots) +
     plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
 
 ggsave(paste0(code_dir, "plots/barplots_", date, ".jpg"), barplot, width = 14, height = 8)
+
+barplot_aaic <- barplots[[2]] + 
+    ggtitle("**Figure 3.** Mean bias of cogxwalkr crosswalk and co-calibration.") +  
+    theme(plot.caption.position = "plot", plot.title.position = "plot", 
+        plot.title = element_textbox_simple(),
+        plot.caption = element_textbox_simple(width = unit(1, "npc"), margin = margin(t = 10))) 
+
+ggsave(paste0(code_dir, "plots/barplot_aaic_", date, ".jpg"), barplot_aaic, width = 12, height = 5)
 
 # CHECK OTHER DIRECTION -----------------------------------------------------------
 
