@@ -68,34 +68,41 @@ alldata[, `:=` (slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1)
                 crosswalk_to = factor(gsub("Group ", "G", crosswalk_to), levels = c("G1", "G2")), 
                 N_label = factor(paste0("N=", n_sample), levels = c("N=500", "N=1000", "N=5000")))]
 alldata[, x_factor := fct_cross(eslabel, N_label, sep = "\n")]
+alldata[, fill_factor := fct_cross(Method, crosswalk_to, sep = " - ")]
+
+## make absolute value versions of bias  
+alldata[, `:=` (abs_bias_sim = abs(bias_sim), abs_bias_truth = abs(bias_truth))]
 
 maindata <- copy(alldata)
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
 get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "G2", ylab = "Bias"){
-    data <- copy(dataset[crosswalk_to == cw_to])
+    if (!is.na(cw_to)){
+        dataset <- copy(dataset[crosswalk_to == cw_to])
+    }
     lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
-    p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = Method)) +
+    p <- ggplot(dataset, aes(x = x_factor, y = get(yvar), fill = fill_factor)) +
         geom_boxplot(notch = TRUE) +
         facet_wrap(~slabel, nrow = 1) +
         ylab(ylab) +
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
-        scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
+        #scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
+        scale_fill_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311")) +
         scale_y_continuous(limits = lims, n.breaks = 6) +
         geom_hline(yintercept = 0, colour = "red", lty = 2)
     return(p)
 }
 
-trueplot <- get_boxplot(yvar = "bias_sim", ylab = "Bias \n(estimate vs. sim parameter)")
+trueplot <- get_boxplot(yvar = "bias_sim", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. sim parameter)")
 
 ggsave(paste0(code_dir, "plots/bias_vs_simcoef_", date, ".jpg"), trueplot, width = 14, height = 6)
 
 # COMPARISONS TO TARGET COEFFICIENTS ---------------------------------------
 
-targetplot <- get_boxplot(yvar = "bias_truth", ylab = "Bias \n(estimate vs. target coef)")
+targetplot <- get_boxplot(yvar = "bias_truth", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
 
 ggsave(paste0(code_dir, "plots/bias_vs_targetcoef_", date, ".jpg"), targetplot, width = 14, height = 6)
 
@@ -112,14 +119,16 @@ ggsave(paste0(code_dir, "plots/bias_vs_targetcoef_aaic_", date, ".jpg"), targetp
 
 ## for a given iteration number and outcome 
 
-get_barplot <- function(yvar, dataset = maindata, cw_to = "G2"){
-    data <- copy(dataset[crosswalk_to == cw_to])
+get_meanplot <- function(yvar, dataset = maindata, cw_to = "G2"){
+    if (!is.na(cw_to)){
+        dataset <- copy(dataset[crosswalk_to == cw_to])
+    }
     lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
-    p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = Method)) +
+    p <- ggplot(dataset, aes(x = x_factor, y = get(yvar), color = fill_factor)) +
         stat_summary(fun = mean,
-                     geom = "bar",
+                     geom = "point",
                      position = position_dodge(width = 0.9)) +
-        stat_summary(fun.data = mean_se,
+        stat_summary(fun.data = mean_cl_normal,
                      geom = "errorbar",
                      position = position_dodge(width = 0.9),
                      width = 0.2) +
@@ -127,21 +136,22 @@ get_barplot <- function(yvar, dataset = maindata, cw_to = "G2"){
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
-        scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-        ylab("Mean Bias (± 1 SE)") +
+        #scale_color_viridis_d(name = "", option = "turbo", begin = .2, end = .8) +
+        scale_color_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311")) +
+        ylab("Mean Bias (95% CI)") +
         geom_hline(yintercept = 0, colour = "red", lty = 2)
     return(p)
 }
 
-barplots <- lapply(c("bias_sim", "bias_truth"), function(y) get_barplot(y))
+meanplots <- lapply(c("bias_sim", "bias_truth"), function(y) get_meanplot(y, cw_to = NA))
 
-barplot <- wrap_plots(barplots) + 
+meanplot <- wrap_plots(meanplots) + 
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
     plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
 
-ggsave(paste0(code_dir, "plots/barplots_", date, ".jpg"), barplot, width = 14, height = 8)
+ggsave(paste0(code_dir, "plots/meanplots_", date, ".jpg"), meanplots, width = 14, height = 8)
 
-barplot_aaic <- barplots[[2]] + 
+barplot_aaic <- meanplots[[2]] + 
     ggtitle("**Figure 3.** Mean bias of cogxwalkr crosswalk and co-calibration.") +  
     theme(plot.caption.position = "plot", plot.title.position = "plot", 
         plot.title = element_textbox_simple(),
