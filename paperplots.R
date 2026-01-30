@@ -63,9 +63,9 @@ alldata <- alldata[!(Method == "Cocalibration" & !crosswalk_to == cc_rg)]
 ## define bias and other variables 
 alldata[, `:=` (bias_sim = coef-b1, bias_truth = coef-truecoefs, naive_diff = abs(naivecoefs-truecoefs) - abs(coef-truecoefs), 
                 naivetrue_diff = naivecoefs - truecoefs)]
-alldata[Method == "cogxwalkr", Method := "Cogxwalkr"][, Method := factor(Method, levels = c("Cocalibration", "Cogxwalkr"))]
+alldata[Method == "cogxwalkr", Method := "ES Crosswalking"][, Method := factor(Method, levels = c("Cocalibration", "ES Crosswalking"))]
 alldata[, `:=` (slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.2", "ES 0.4")), 
-                crosswalk_to = factor(gsub("Group ", "G", crosswalk_to), levels = c("G1", "G2")), 
+                crosswalk_to = factor(gsub("Group ", "S", crosswalk_to), levels = c("S1", "S2")), 
                 N_label = factor(paste0("N=", n_sample), levels = c("N=500", "N=1000", "N=5000")))]
 alldata[, x_factor := fct_cross(eslabel, N_label, sep = "\n")]
 alldata[, fill_factor := fct_cross(Method, crosswalk_to, sep = " - ")]
@@ -73,11 +73,14 @@ alldata[, fill_factor := fct_cross(Method, crosswalk_to, sep = " - ")]
 ## make absolute value versions of bias  
 alldata[, `:=` (abs_bias_sim = abs(bias_sim), abs_bias_truth = abs(bias_truth))]
 
+## get percent bias
+alldata[, `:=` (pct_bias_sim = bias_sim/b1, pct_bias_truth = bias_truth/b1)]
+
 maindata <- copy(alldata)
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
-get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "G2", ylab = "Bias"){
+get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "S2", ylab = "Bias"){
     if (!is.na(cw_to)){
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
@@ -98,13 +101,13 @@ get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "G2", yla
 
 trueplot <- get_boxplot(yvar = "bias_sim", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. sim parameter)")
 
-ggsave(paste0(code_dir, "plots/bias_vs_simcoef_", date, ".jpg"), trueplot, width = 14, height = 6)
+ggsave(paste0(code_dir, "plots/Figure2_bias_vs_simcoef_", date, ".pdf"), trueplot, width = 14, height = 6)
 
 # COMPARISONS TO TARGET COEFFICIENTS ---------------------------------------
 
 targetplot <- get_boxplot(yvar = "bias_truth", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
 
-ggsave(paste0(code_dir, "plots/bias_vs_targetcoef_", date, ".jpg"), targetplot, width = 14, height = 6)
+ggsave(paste0(code_dir, "plots/Figure3_bias_vs_targetcoef_", date, ".pdf"), targetplot, width = 14, height = 6)
 
 targetplot_aaic <- targetplot + 
     ggtitle("**Figure 2.** Bias of cogxwalkr crosswalk and co-calibration methods across simulation replications.") +  
@@ -115,11 +118,11 @@ targetplot_aaic <- targetplot +
 
 ggsave(paste0(code_dir, "plots/bias_vs_targetcoef_aaic_", date, ".jpg"), targetplot_aaic, width = 12, height = 5)
 
-# BARPLOT COMPARISON --------------------------------------------------------------
+# MEAN COMPARISON --------------------------------------------------------------
 
 ## for a given iteration number and outcome 
 
-get_meanplot <- function(yvar, dataset = maindata, cw_to = "G2"){
+get_meanplot <- function(yvar, dataset = maindata, cw_to = "S2"){
     if (!is.na(cw_to)){
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
@@ -127,15 +130,16 @@ get_meanplot <- function(yvar, dataset = maindata, cw_to = "G2"){
     p <- ggplot(dataset, aes(x = x_factor, y = get(yvar), color = fill_factor)) +
         stat_summary(fun = mean,
                      geom = "point",
-                     position = position_dodge(width = 0.9)) +
+                     position = position_dodge(width = 0.4)) +
         stat_summary(fun.data = mean_cl_normal,
                      geom = "errorbar",
-                     position = position_dodge(width = 0.9),
-                     width = 0.2) +
+                     position = position_dodge(width = 0.4),
+                     width = 0) +
         facet_wrap(~ slabel, nrow = 1) +
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
+        scale_y_continuous(labels = scales::percent, breaks = c(-0.06, -0.03, 0, 0.03, 0.06)) +
         #scale_color_viridis_d(name = "", option = "turbo", begin = .2, end = .8) +
         scale_color_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311")) +
         ylab("Mean Bias (95% CI)") +
@@ -143,13 +147,9 @@ get_meanplot <- function(yvar, dataset = maindata, cw_to = "G2"){
     return(p)
 }
 
-meanplots <- lapply(c("bias_sim", "bias_truth"), function(y) get_meanplot(y, cw_to = NA))
+meanplots <- lapply(c("pct_bias_sim", "pct_bias_truth"), function(y) get_meanplot(y, cw_to = NA))
 
-meanplot <- wrap_plots(meanplots) + 
-    plot_annotation(tag_levels = "A", tag_suffix = ".") +
-    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-
-ggsave(paste0(code_dir, "plots/meanplots_", date, ".jpg"), meanplots, width = 14, height = 8)
+ggsave(paste0(code_dir, "plots/Figure4_meanplots_", date, ".pdf"), meanplots[[2]], width = 12, height = 5)
 
 barplot_aaic <- meanplots[[2]] + 
     ggtitle("**Figure 3.** Mean bias of cogxwalkr crosswalk and co-calibration.") +  
