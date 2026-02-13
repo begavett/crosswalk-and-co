@@ -109,15 +109,6 @@ targetplot <- get_boxplot(yvar = "bias_truth", cw_to = NA, ylab = "Absolute Bias
 
 ggsave(paste0(code_dir, "plots/Figure3_bias_vs_targetcoef_", date, ".pdf"), targetplot, width = 14, height = 6)
 
-targetplot_aaic <- targetplot + 
-    ggtitle("**Figure 2.** Bias of cogxwalkr crosswalk and co-calibration methods across simulation replications.") +  
-    labs(caption = "Note: ES = effect size.") + 
-    theme(plot.caption.position = "plot", plot.title.position = "plot", 
-        plot.title = element_textbox_simple(),
-        plot.caption = element_textbox_simple(width = unit(1, "npc"), margin = margin(t = 10))) 
-
-ggsave(paste0(code_dir, "plots/bias_vs_targetcoef_aaic_", date, ".jpg"), targetplot_aaic, width = 12, height = 5)
-
 # MEAN COMPARISON --------------------------------------------------------------
 
 ## for a given iteration number and outcome 
@@ -151,32 +142,13 @@ meanplots <- lapply(c("pct_bias_sim", "pct_bias_truth"), function(y) get_meanplo
 
 ggsave(paste0(code_dir, "plots/Figure4_meanplots_", date, ".pdf"), meanplots[[2]], width = 12, height = 5)
 
-barplot_aaic <- meanplots[[2]] + 
-    ggtitle("**Figure 3.** Mean bias of cogxwalkr crosswalk and co-calibration.") +  
-    theme(plot.caption.position = "plot", plot.title.position = "plot", 
-        plot.title = element_textbox_simple(),
-        plot.caption = element_textbox_simple(width = unit(1, "npc"), margin = margin(t = 10))) 
-
-ggsave(paste0(code_dir, "plots/barplot_aaic_", date, ".jpg"), barplot_aaic, width = 12, height = 5)
-
-# CHECK OTHER DIRECTION -----------------------------------------------------------
-
-barplots_otherdirection <- lapply(c("bias_sim", "bias_truth"), function(y) get_barplot(y, cw_to = "G1"))
-
-barplot_otherdirection <- wrap_plots(barplots_otherdirection) + 
-    plot_annotation(tag_levels = "A", tag_suffix = ".") +
-    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-
-ggsave(paste0(code_dir, "plots/barplots_otherdirection_", date, ".jpg"), barplot_otherdirection, width = 14, height = 8)
-
 # COMPARISON WITH MORE ITERATIONS -------------------------------------------------
 
 it1000_dt <- copy(maindata[rep <= 1000]); it2000_dt <- copy(maindata)
 
 iteration_dt <- rbind(it1000_dt[, version := "1000 iterations"], it2000_dt[, version := "2000 iterations"])
 
-
-get_iterplot <- function(yvar){
+get_iterplot <- function(yvar, ylab = "Bias"){
     data <- copy(iteration_dt)
     lims <- c(iteration_dt[, min(get(yvar))], iteration_dt[, max(get(yvar))])
     p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = as.factor(version))) +
@@ -192,10 +164,11 @@ get_iterplot <- function(yvar){
     return(p)
 }
 
-iterplots <- lapply(c("bias_sim", "bias_truth"), function(y) get_iterplot(y))
+iterplot_sim <- get_iterplot("bias_sim", ylab = "Absolute Bias \n(estimate vs. sim parameter)")
+iterplot_target <- get_iterplot("bias_truth", ylab = "Absolute Bias \n(estimate vs. target coef)")
 
-ggsave(paste0(code_dir, "plots/iterplot_sim_", date, ".jpg"), iterplots[[1]], width = 12, height = 8)
-
+ggsave(paste0(code_dir, "plots/iterplot_sim_", date, ".jpg"), iterplot_sim, width = 12, height = 8)
+ggsave(paste0(code_dir, "plots/iterplot_target_", date, ".jpg"), iterplot_target, width = 12, height = 8)
 
 # NAIVE COMPARISON -----------------------------------------------------------
 
