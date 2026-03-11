@@ -113,6 +113,11 @@ ggsave(paste0(code_dir, "plots/Figure3_bias_vs_targetcoef_", date, ".pdf"), targ
 
 ## for a given iteration number and outcome 
 
+#### observing super-population 
+### SD of bias of estimates - divided by square root of sample size
+
+## add percent coverage for the confidence intervals
+
 get_meanplot <- function(yvar, dataset = maindata, cw_to = "S2"){
     if (!is.na(cw_to)){
         dataset <- copy(dataset[crosswalk_to == cw_to])
