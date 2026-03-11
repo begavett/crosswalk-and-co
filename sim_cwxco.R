@@ -56,6 +56,7 @@ if (user == "brandon") {
 
 source(paste0(code_dir, "src/helper.R"))
 dem_logr <- readRDS(paste0(code_dir, "models/dem_logr.Rds"))
+dem_logr_noedu <- readRDS(paste0(code_dir, "models/dem_logr_noedu.Rds"))
 
 # Setup -----------------------------------------------
 
