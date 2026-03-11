@@ -96,7 +96,7 @@ results <- with_progress({
   p <- progressor(along = iter_start:iter_end)
   
   future_Map(function(i) {
-    res <- sim_cwxco(iter = i, N = sample_size, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9)
+    res <- sim_cwxco(iter = i, N = sample_size, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9, dem_on_edu = FALSE)
     p()
     res
   }, 

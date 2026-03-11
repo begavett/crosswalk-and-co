@@ -497,7 +497,7 @@ simCog <- function(itempars, itemnames, prop_high_edu = .3, b0 = 0, b1 = .2, n_s
 #'
 #'
 
-sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9) {
+sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9, dem_on_edu = FALSE) {
   
   library(purrr)
   
@@ -601,11 +601,11 @@ sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, 
   mem_fscores <- bind_rows(mem_fscores_G1, mem_fscores_G2)
   
   mem_fscores <- mem_fscores %>%
-    mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
+    mutate(DemProb = if(dem_on_edu) predict(dem_logr, newdata = ., type = "response") else predict(dem_logr_noedu, newdata = ., type = "response"),
            Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
   
   mem_fscores_g3 <- mem_fscores_G3 %>%
-    mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
+    mutate(DemProb = if(dem_on_edu) predict(dem_logr, newdata = ., type = "response") else predict(dem_logr_noedu, newdata = ., type = "response"),
            Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
   
   # 
