@@ -65,7 +65,7 @@ pacman::p_load(
 The `cogxwalkr` package is installed from GitHub:
 
 ```r
-remotes::install_github("jrgant/cogxwalkr")
+remotes::install_github("jrgant/cogxwalkr@04a4cb7725736ca7ad9c860f69c9277f0095b31a")
 ```
 
 ---
