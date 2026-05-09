@@ -3,7 +3,7 @@
 #
 # Purpose:
 #   This script loads simulation results from RDS files, computes bias metrics
-#   relative to either the true coefficient or a target coefficient, and 
+#   relative to either the true coefficient or a target coefficient, and
 #   generates publication-ready plots (boxplots or barplots) comparing methods
 #   across scenarios and target groups.
 #
@@ -38,13 +38,13 @@ p_load(magrittr, dplyr, forcats, ggplot2, tidyr, data.table, patchwork, ggtext)
 user <- Sys.info()[["user"]]
 
 if (user == "brandon") {
-  code_dir <- "~/Dropbox/Projects/crosswalk-and-co/"
+    code_dir <- "~/Dropbox/Projects/crosswalk-and-co/"
 } else if (user == "emmanich") {
-  if (Sys.info()[["sysname"]] == "Windows") {
-    code_dir <- "C:/Users/emmanich/code/crosswalk-and-co/"
-  } else {
-    code_dir <- "/Users/emmanich/code/crosswalk-and-co/"
-  }
+    if (Sys.info()[["sysname"]] == "Windows") {
+        code_dir <- "C:/Users/emmanich/code/crosswalk-and-co/"
+    } else {
+        code_dir <- "/Users/emmanich/code/crosswalk-and-co/"
+    }
 }
 
 date <- format(Sys.Date(), "%Y_%m_%d")
@@ -52,36 +52,53 @@ date <- format(Sys.Date(), "%Y_%m_%d")
 # LOAD FILES -----------------------------------------------------------
 
 files <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_sum", full.names = TRUE)
-alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(file)))) 
+alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(file))))
+
+## alt files
+altfiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[ci|noci]", full.names = TRUE)
+altdata <- rbindlist(lapply(altfiles, function(file) as.data.table(readr::read_rds(file))))
+
+## fix slabel for altdata
+altdata[, slabel := NULL]
+altdata <- merge(altdata, unique(alldata[, .(scenario, slabel)]), by = "scenario", all.x = TRUE)
 
 # FORMAT DATA -----------------------------------------------------------
 
-## for cocalibration - scaling should be from the version that you are crosswalking to - so only 
-## keep the version that where the reference matches the version you are crosswalking to 
-alldata <- alldata[!(Method == "Cocalibration" & !crosswalk_to == cc_rg)]
+format_data <- function(data) {
+    ## for cocalibration - scaling should be from the version that you are crosswalking to - so only
+    ## keep the version that where the reference matches the version you are crosswalking to
+    data <- data[!(Method == "Cocalibration" & !crosswalk_to == cc_rg)]
 
-## define bias and other variables 
-alldata[, `:=` (bias_sim = coef-b1, bias_truth = coef-truecoefs, naive_diff = abs(naivecoefs-truecoefs) - abs(coef-truecoefs), 
-                naivetrue_diff = naivecoefs - truecoefs)]
-alldata[Method == "cogxwalkr", Method := "ES Crosswalking"][, Method := factor(Method, levels = c("Cocalibration", "ES Crosswalking"))]
-alldata[, `:=` (slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.2", "ES 0.4")), 
-                crosswalk_to = factor(gsub("Group ", "S", crosswalk_to), levels = c("S1", "S2")), 
-                N_label = factor(paste0("N=", n_sample), levels = c("N=500", "N=1000", "N=5000")))]
-alldata[, x_factor := fct_cross(eslabel, N_label, sep = "\n")]
-alldata[, fill_factor := fct_cross(Method, crosswalk_to, sep = " - ")]
+    ## define bias and other variables
+    data[, `:=`(
+        bias_sim = coef - b1, bias_truth = coef - truecoefs, naive_diff = abs(naivecoefs - truecoefs) - abs(coef - truecoefs),
+        naivetrue_diff = naivecoefs - truecoefs
+    )]
+    data[Method == "cogxwalkr", Method := "ES Crosswalking"][, Method := factor(Method, levels = c("Cocalibration", "ES Crosswalking"))]
+    data[, `:=`(
+        slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.2", "ES 0.4")),
+        crosswalk_to = factor(gsub("Group ", "S", crosswalk_to), levels = c("S1", "S2")),
+        N_label = factor(paste0("N=", n_sample), levels = c("N=500", "N=1000", "N=5000"))
+    )]
+    data[, x_factor := fct_cross(eslabel, N_label, sep = "\n")]
+    data[, fill_factor := fct_cross(Method, crosswalk_to, sep = " - ")]
 
-## make absolute value versions of bias  
-alldata[, `:=` (abs_bias_sim = abs(bias_sim), abs_bias_truth = abs(bias_truth))]
+    ## make absolute value versions of bias
+    data[, `:=`(abs_bias_sim = abs(bias_sim), abs_bias_truth = abs(bias_truth))]
 
-## get percent bias
-alldata[, `:=` (pct_bias_sim = bias_sim/b1, pct_bias_truth = bias_truth/b1)]
+    ## get percent bias
+    data[, `:=`(pct_bias_sim = bias_sim / b1, pct_bias_truth = bias_truth / b1)]
 
-maindata <- copy(alldata)
+    return(data)
+}
+
+maindata <- format_data(alldata)
+alt_maindata <- format_data(altdata)
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
-get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "S2", ylab = "Bias"){
-    if (!is.na(cw_to)){
+get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "S2", ylab = "Bias") {
+    if (!is.na(cw_to)) {
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
     lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
@@ -92,8 +109,8 @@ get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "S2", yla
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
-        #scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-        scale_fill_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311")) +
+        # scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
+        scale_fill_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311", "#9ff160", "#9ff160")) +
         scale_y_continuous(limits = lims, n.breaks = 6) +
         geom_hline(yintercept = 0, colour = "red", lty = 2)
     return(p)
@@ -109,35 +126,51 @@ targetplot <- get_boxplot(yvar = "bias_truth", cw_to = NA, ylab = "Absolute Bias
 
 ggsave(paste0(code_dir, "plots/Figure3_bias_vs_targetcoef_", date, ".pdf"), targetplot, width = 14, height = 6)
 
+# EDUCATION COMPARISON --------------------------------------------------------
+
+alt_maindata[, fill_factor := ifelse(Method == "Cocalibration", paste0(Method, " - ", crosswalk_to),
+    paste0(Method, " - ", crosswalk_to, " - ", ifelse(demwithedu == FALSE, "E", "OKAY"))
+)]
+alt_maindata[, fill_factor := factor(fill_factor, levels = c(
+    "Cocalibration - S1", "Cocalibration - S2",
+    "ES Crosswalking - S1 - E", "ES Crosswalking - S2 - E",
+    "ES Crosswalking - S1 - OKAY", "ES Crosswalking - S2 - OKAY"
+))]
+targetplot_alt <- get_boxplot(yvar = "bias_truth", dataset = alt_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
+
 # MEAN COMPARISON --------------------------------------------------------------
 
-## for a given iteration number and outcome 
+## for a given iteration number and outcome
 
-#### observing super-population 
+#### observing super-population
 ### SD of bias of estimates - divided by square root of sample size
 
 ## add percent coverage for the confidence intervals
 
-get_meanplot <- function(yvar, dataset = maindata, cw_to = "S2"){
-    if (!is.na(cw_to)){
+get_meanplot <- function(yvar, dataset = maindata, cw_to = "S2") {
+    if (!is.na(cw_to)) {
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
     lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
     p <- ggplot(dataset, aes(x = x_factor, y = get(yvar), color = fill_factor)) +
-        stat_summary(fun = mean,
-                     geom = "point",
-                     position = position_dodge(width = 0.4)) +
-        stat_summary(fun.data = mean_cl_normal,
-                     geom = "errorbar",
-                     position = position_dodge(width = 0.4),
-                     width = 0) +
-        facet_wrap(~ slabel, nrow = 1) +
+        stat_summary(
+            fun = mean,
+            geom = "point",
+            position = position_dodge(width = 0.4)
+        ) +
+        stat_summary(
+            fun.data = mean_cl_normal,
+            geom = "errorbar",
+            position = position_dodge(width = 0.4),
+            width = 0
+        ) +
+        facet_wrap(~slabel, nrow = 1) +
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
         scale_y_continuous(labels = scales::percent, breaks = c(-0.06, -0.03, 0, 0.03, 0.06)) +
-        #scale_color_viridis_d(name = "", option = "turbo", begin = .2, end = .8) +
-        scale_color_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311")) +
+        # scale_color_viridis_d(name = "", option = "turbo", begin = .2, end = .8) +
+        scale_color_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311", "#9ff160", "#9ff160")) +
         ylab("Mean Bias (95% CI)") +
         geom_hline(yintercept = 0, colour = "red", lty = 2)
     return(p)
@@ -147,18 +180,24 @@ meanplots <- lapply(c("pct_bias_sim", "pct_bias_truth"), function(y) get_meanplo
 
 ggsave(paste0(code_dir, "plots/Figure4_meanplots_", date, ".pdf"), meanplots[[2]], width = 12, height = 5)
 
+# SECOND EDUCATION COMPARISON -----------------------------------------------------
+
+alt_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = alt_maindata, cw_to = NA)
+
+
 # COMPARISON WITH MORE ITERATIONS -------------------------------------------------
 
-it1000_dt <- copy(maindata[rep <= 1000]); it2000_dt <- copy(maindata)
+it1000_dt <- copy(maindata[rep <= 1000])
+it2000_dt <- copy(maindata)
 
 iteration_dt <- rbind(it1000_dt[, version := "1000 iterations"], it2000_dt[, version := "2000 iterations"])
 
-get_iterplot <- function(yvar, ylab = "Bias"){
+get_iterplot <- function(yvar, ylab = "Bias") {
     data <- copy(iteration_dt)
     lims <- c(iteration_dt[, min(get(yvar))], iteration_dt[, max(get(yvar))])
     p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = as.factor(version))) +
         geom_boxplot(notch = TRUE) +
-        facet_wrap(~slabel+Method, nrow = 2) +
+        facet_wrap(~ slabel + Method, nrow = 2) +
         ylab("Bias") +
         xlab("Condition") +
         theme_bw() +
@@ -179,36 +218,37 @@ ggsave(paste0(code_dir, "plots/iterplot_target_", date, ".jpg"), iterplot_target
 
 naiveplots_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naive_diff") + ylab("Naive Bias - Estimated Bias"))
 
-naiveplot_box <- wrap_plots(naiveplots) + 
+naiveplot_box <- wrap_plots(naiveplots) +
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
     plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
 
 naiveplots_bar <- lapply(c(500, 1000, 5000), function(n) get_barplot("naive_diff", n) + ylab("Naive Bias - Estimated Bias"))
 
-naiveplot_bar <- wrap_plots(naiveplots_bar) + 
+naiveplot_bar <- wrap_plots(naiveplots_bar) +
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
     plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-## reason why we see low means for cocalibration: 
+## reason why we see low means for cocalibration:
 maindata[, .(min = min(naive_diff), max = max(naive_diff)), by = c("x_factor", "Method")]
-ggplot(maindata[Method == "Cocalibration" & n_sample == 1000 & x_factor == "G1 - ES 0.2"], aes(x = coef)) + geom_histogram(fill = "white", color = "black") + theme_bw()
+ggplot(maindata[Method == "Cocalibration" & n_sample == 1000 & x_factor == "G1 - ES 0.2"], aes(x = coef)) +
+    geom_histogram(fill = "white", color = "black") +
+    theme_bw()
 
-## boxplot for just cogxwalkr 
+## boxplot for just cogxwalkr
 naiveplots_cogx_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naive_diff", dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive Bias - Estimated Bias"))
 
-naiveplot_cogx_box <- wrap_plots(naiveplots_cogx_box) + 
+naiveplot_cogx_box <- wrap_plots(naiveplots_cogx_box) +
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
     plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
 
 ## barplot for just cogxwalkr
 naiveplots_cogx_bar <- lapply(c(500, 1000, 5000), function(n) get_barplot("naive_diff", n, dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive Bias - Estimated Bias"))
 
-naiveplot_cogx_bar <- wrap_plots(naiveplots_cogx_bar) + 
+naiveplot_cogx_bar <- wrap_plots(naiveplots_cogx_bar) +
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
     plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
 
 ## difference between naive and true effects (is this not really that big?)
 naivetrueplots_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naivetrue_diff", dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive - True Coefficient") + theme(legend.position = "none"))
 
-naivetrueplot_box <- wrap_plots(naivetrueplots_box) + 
+naivetrueplot_box <- wrap_plots(naivetrueplots_box) +
     plot_annotation(tag_levels = "A", tag_suffix = ".")
-
