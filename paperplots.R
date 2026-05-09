@@ -184,7 +184,6 @@ ggsave(paste0(code_dir, "plots/Figure4_meanplots_", date, ".pdf"), meanplots[[2]
 
 alt_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = alt_maindata, cw_to = NA)
 
-
 # COMPARISON WITH MORE ITERATIONS -------------------------------------------------
 
 it1000_dt <- copy(maindata[rep <= 1000])
