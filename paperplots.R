@@ -58,6 +58,11 @@ alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(
 altfiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[ci|noci]", full.names = TRUE)
 altdata <- rbindlist(lapply(altfiles, function(file) as.data.table(readr::read_rds(file))))
 
+## june files
+junefiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[ci|noci]", full.names = TRUE)
+junefiles <- junefiles[grepl("jun", junefiles)]
+junedata <- rbindlist(lapply(junefiles, function(file) as.data.table(readr::read_rds(file))))
+
 ## fix slabel for altdata
 altdata[, slabel := NULL]
 altdata <- merge(altdata, unique(alldata[, .(scenario, slabel)]), by = "scenario", all.x = TRUE)
@@ -94,6 +99,7 @@ format_data <- function(data) {
 
 maindata <- format_data(alldata)
 alt_maindata <- format_data(altdata)
+june_maindata <- format_data(junedata)
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
@@ -137,6 +143,17 @@ alt_maindata[, fill_factor := factor(fill_factor, levels = c(
     "ES Crosswalking - S1 - OKAY", "ES Crosswalking - S2 - OKAY"
 ))]
 targetplot_alt <- get_boxplot(yvar = "bias_truth", dataset = alt_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
+
+## june version
+june_maindata[, fill_factor := ifelse(Method == "Cocalibration", paste0(Method, " - ", crosswalk_to),
+    paste0(Method, " - ", crosswalk_to, " - ", ifelse(demwithedu == FALSE, "E", "OKAY"))
+)]
+june_maindata[, fill_factor := factor(fill_factor, levels = c(
+    "Cocalibration - S1", "Cocalibration - S2",
+    "ES Crosswalking - S1 - E", "ES Crosswalking - S2 - E",
+    "ES Crosswalking - S1 - OKAY", "ES Crosswalking - S2 - OKAY"
+))]
+targetplot_june <- get_boxplot(yvar = "bias_truth", dataset = june_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
 
 # MEAN COMPARISON --------------------------------------------------------------
 
@@ -183,6 +200,8 @@ ggsave(paste0(code_dir, "plots/Figure4_meanplots_", date, ".pdf"), meanplots[[2]
 # SECOND EDUCATION COMPARISON -----------------------------------------------------
 
 alt_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = alt_maindata, cw_to = NA)
+
+june_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = june_maindata, cw_to = NA)
 
 # COMPARISON WITH MORE ITERATIONS -------------------------------------------------
 
