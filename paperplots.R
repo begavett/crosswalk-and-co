@@ -33,7 +33,7 @@
 ##########################################################
 
 library(pacman)
-p_load(magrittr, dplyr, forcats, ggplot2, tidyr, data.table, patchwork, ggtext)
+p_load(magrittr, dplyr, forcats, ggplot2, tidyr, data.table, patchwork, ggtext, binom)
 
 user <- Sys.info()[["user"]]
 
@@ -59,9 +59,13 @@ altfiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0
 altdata <- rbindlist(lapply(altfiles, function(file) as.data.table(readr::read_rds(file))))
 
 ## june files
-junefiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[ci|noci]", full.names = TRUE)
+junefiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[noci]", full.names = TRUE)
 junefiles <- junefiles[grepl("jun", junefiles)]
 junedata <- rbindlist(lapply(junefiles, function(file) as.data.table(readr::read_rds(file))))
+
+juneCIfiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[ci]", full.names = TRUE)
+juneCIfiles <- juneCIfiles[grepl("jun", juneCIfiles)]
+juneCIdata <- rbindlist(lapply(juneCIfiles, function(file) as.data.table(readr::read_rds(file))))
 
 ## fix slabel for altdata
 altdata[, slabel := NULL]
@@ -69,7 +73,7 @@ altdata <- merge(altdata, unique(alldata[, .(scenario, slabel)]), by = "scenario
 
 # FORMAT DATA -----------------------------------------------------------
 
-format_data <- function(data) {
+format_data <- function(data, CI = FALSE) {
     ## for cocalibration - scaling should be from the version that you are crosswalking to - so only
     ## keep the version that where the reference matches the version you are crosswalking to
     data <- data[!(Method == "Cocalibration" & !crosswalk_to == cc_rg)]
@@ -94,12 +98,18 @@ format_data <- function(data) {
     ## get percent bias
     data[, `:=`(pct_bias_sim = bias_sim / b1, pct_bias_truth = bias_truth / b1)]
 
+    ## CI coverage if exists
+    if (CI == TRUE) {
+        data[, CIcoverage := as.numeric(truecoefs > lwr & truecoefs < upr)]
+    }
+
     return(data)
 }
 
 maindata <- format_data(alldata)
 alt_maindata <- format_data(altdata)
 june_maindata <- format_data(junedata)
+juneCI_maindata <- format_data(juneCIdata, CI = TRUE)
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
@@ -155,6 +165,17 @@ june_maindata[, fill_factor := factor(fill_factor, levels = c(
 ))]
 targetplot_june <- get_boxplot(yvar = "bias_truth", dataset = june_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
 
+## version with CI's (should be no different because only difference is CIs)
+juneCI_maindata[, fill_factor := ifelse(Method == "Cocalibration", paste0(Method, " - ", crosswalk_to),
+    paste0(Method, " - ", crosswalk_to, " - ", ifelse(demwithedu == FALSE, "E", "OKAY"))
+)]
+juneCI_maindata[, fill_factor := factor(fill_factor, levels = c(
+    "Cocalibration - S1", "Cocalibration - S2",
+    "ES Crosswalking - S1 - E", "ES Crosswalking - S2 - E",
+    "ES Crosswalking - S1 - OKAY", "ES Crosswalking - S2 - OKAY"
+))]
+targetplot_juneCI <- get_boxplot(yvar = "bias_truth", dataset = juneCI_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
+
 # MEAN COMPARISON --------------------------------------------------------------
 
 ## for a given iteration number and outcome
@@ -202,6 +223,38 @@ ggsave(paste0(code_dir, "plots/Figure4_meanplots_", date, ".pdf"), meanplots[[2]
 alt_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = alt_maindata, cw_to = NA)
 
 june_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = june_maindata, cw_to = NA)
+
+juneCI_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = juneCI_maindata, cw_to = NA)
+
+# CI COVERAGE ---------------------------------------------------------------------
+
+get_coverageplot <- function(yvar = "CIcoverage", dataset = juneCI_maindata, cw_to = "S2") {
+    if (!is.na(cw_to)) {
+        dataset <- copy(dataset[crosswalk_to == cw_to])
+    }
+    dataset[, pct_coverage := mean(CIcoverage), by = c("slabel", "x_factor", "fill_factor")]
+    dataset[, num_coverage := sum(CIcoverage), by = c("slabel", "x_factor", "fill_factor")]
+    num_sims <- dataset[, .(nrep = max(rep)), by = c("slabel", "x_factor", "fill_factor")][, unique(nrep)]
+    if (length(num_sims) > 1) stop("More than one number of replicates")
+    dataset <- unique(dataset, by = c("slabel", "x_factor", "fill_factor", "pct_coverage", "num_coverage"))
+    dataset[, c("lower", "upper") := binom.confint(x = dataset[, num_coverage], n = num_sims, conf.level = 0.95, methods = "wilson")[, c("lower", "upper")]]
+    
+    p <- ggplot(dataset, aes(x = x_factor, y = pct_coverage, ymin = lower, 
+                             ymax = upper, color = fill_factor)) +
+        geom_point(position = position_dodge(width = 0.4)) +
+        geom_errorbar(width = 0, position = position_dodge(width = 0.4)) +
+        geom_hline(yintercept = 0.95, colour = "red", lty = 2) +
+        facet_wrap(~slabel, nrow = 1) +
+        ylab("Coverage") +
+        xlab("Condition") +
+        theme_bw() +
+        theme(legend.position = "bottom") +
+        scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
+        scale_color_viridis_d(option = "plasma", begin = .2, end = .8, name = "") 
+    return(p)
+}
+
+coverageplot <- get_coverageplot()
 
 # COMPARISON WITH MORE ITERATIONS -------------------------------------------------
 
