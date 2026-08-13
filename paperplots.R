@@ -51,25 +51,8 @@ date <- format(Sys.Date(), "%Y_%m_%d")
 
 # LOAD FILES -----------------------------------------------------------
 
-files <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_sum", full.names = TRUE)
+files <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_ci_aug2026", full.names = TRUE)
 alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(file))))
-
-## alt files
-altfiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[ci|noci]", full.names = TRUE)
-altdata <- rbindlist(lapply(altfiles, function(file) as.data.table(readr::read_rds(file))))
-
-## june files
-junefiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[noci]", full.names = TRUE)
-junefiles <- junefiles[grepl("jun", junefiles)]
-junedata <- rbindlist(lapply(junefiles, function(file) as.data.table(readr::read_rds(file))))
-
-juneCIfiles <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_[ci]", full.names = TRUE)
-juneCIfiles <- juneCIfiles[grepl("jun", juneCIfiles)]
-juneCIdata <- rbindlist(lapply(juneCIfiles, function(file) as.data.table(readr::read_rds(file))))
-
-## fix slabel for altdata
-altdata[, slabel := NULL]
-altdata <- merge(altdata, unique(alldata[, .(scenario, slabel)]), by = "scenario", all.x = TRUE)
 
 # FORMAT DATA -----------------------------------------------------------
 
@@ -95,6 +78,9 @@ format_data <- function(data, CI = FALSE) {
     ## make absolute value versions of bias
     data[, `:=`(abs_bias_sim = abs(bias_sim), abs_bias_truth = abs(bias_truth))]
 
+    ## education conditions 
+    data[, ]
+
     ## get percent bias
     data[, `:=`(pct_bias_sim = bias_sim / b1, pct_bias_truth = bias_truth / b1)]
 
@@ -106,10 +92,7 @@ format_data <- function(data, CI = FALSE) {
     return(data)
 }
 
-maindata <- format_data(alldata)
-alt_maindata <- format_data(altdata)
-june_maindata <- format_data(junedata)
-juneCI_maindata <- format_data(juneCIdata, CI = TRUE)
+maindata <- format_data(alldata, CI = TRUE)
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
@@ -120,7 +103,7 @@ get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "S2", yla
     lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
     p <- ggplot(dataset, aes(x = x_factor, y = get(yvar), fill = fill_factor)) +
         geom_boxplot(notch = TRUE) +
-        facet_wrap(~slabel, nrow = 1) +
+        facet_wrap(~slabel + demwithedu, nrow = 1) +
         ylab(ylab) +
         xlab("Condition") +
         theme_bw() +
