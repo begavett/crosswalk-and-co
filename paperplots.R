@@ -41,7 +41,7 @@ if (user == "brandon") {
     code_dir <- "~/Dropbox/Projects/crosswalk-and-co/"
 } else if (user == "emmanich") {
     if (Sys.info()[["sysname"]] == "Windows") {
-        code_dir <- "C:/Users/emmanich/code/crosswalk-and-co/"
+        code_dir <- "C:/Users/emmanich.HP/code/crosswalk-and-co/"
     } else {
         code_dir <- "/Users/emmanich/code/crosswalk-and-co/"
     }
@@ -69,7 +69,7 @@ format_data <- function(data, CI = FALSE) {
     data[Method == "cogxwalkr", Method := "ES Crosswalking"][, Method := factor(Method, levels = c("Cocalibration", "ES Crosswalking"))]
     data[, `:=`(
         slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.2", "ES 0.4")),
-        crosswalk_to = factor(gsub("Group ", "S", crosswalk_to), levels = c("S1", "S2")),
+        crosswalk_to = factor(gsub("Group ", "O", crosswalk_to), levels = c("O1", "O2")),
         N_label = factor(paste0("N=", n_sample), levels = c("N=500", "N=1000", "N=5000"))
     )]
     data[, x_factor := fct_cross(eslabel, N_label, sep = "\n")]
@@ -78,8 +78,14 @@ format_data <- function(data, CI = FALSE) {
     ## make absolute value versions of bias
     data[, `:=`(abs_bias_sim = abs(bias_sim), abs_bias_truth = abs(bias_truth))]
 
-    ## education conditions 
-    data[, ]
+    ## education conditions
+    data[, dementia_generation_normal := as.numeric(demwithedu == FALSE | is.na(demwithedu))]
+    data[, dementia_generation := fcase(
+        demwithedu == TRUE, "With education",
+        demwithedu == FALSE, "Standard",
+        is.na(demwithedu), NA_character_
+    )]
+    data[, dementia_generation := fct_cross(dementia_generation, crosswalk_to, sep = " - ")]
 
     ## get percent bias
     data[, `:=`(pct_bias_sim = bias_sim / b1, pct_bias_truth = bias_truth / b1)]
@@ -87,6 +93,7 @@ format_data <- function(data, CI = FALSE) {
     ## CI coverage if exists
     if (CI == TRUE) {
         data[, CIcoverage := as.numeric(truecoefs > lwr & truecoefs < upr)]
+        data[, CIcoverage_sim := as.numeric(b1 > lwr & b1 < upr)]
     }
 
     return(data)
@@ -96,14 +103,15 @@ maindata <- format_data(alldata, CI = TRUE)
 
 # COMPARISONS TO TRUE REGRESSION COEFFICIENTS ----------------------------
 
-get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "S2", ylab = "Bias") {
+get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "O2", ylab = "Bias") {
     if (!is.na(cw_to)) {
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
+    dataset <- dataset[dementia_generation_normal == TRUE]
     lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
     p <- ggplot(dataset, aes(x = x_factor, y = get(yvar), fill = fill_factor)) +
         geom_boxplot(notch = TRUE) +
-        facet_wrap(~slabel + demwithedu, nrow = 1) +
+        facet_wrap(~slabel, nrow = 1) +
         ylab(ylab) +
         xlab("Condition") +
         theme_bw() +
@@ -117,47 +125,17 @@ get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "S2", yla
 
 trueplot <- get_boxplot(yvar = "bias_sim", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. sim parameter)")
 
-ggsave(paste0(code_dir, "plots/Figure2_bias_vs_simcoef_", date, ".pdf"), trueplot, width = 14, height = 6)
-
 # COMPARISONS TO TARGET COEFFICIENTS ---------------------------------------
 
 targetplot <- get_boxplot(yvar = "bias_truth", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
 
-ggsave(paste0(code_dir, "plots/Figure3_bias_vs_targetcoef_", date, ".pdf"), targetplot, width = 14, height = 6)
+# JOINT FIGURE 1 --------------------------------------------------------------
 
-# EDUCATION COMPARISON --------------------------------------------------------
+fig1 <- trueplot / targetplot +
+    plot_annotation(tag_levels = "A", tag_suffix = ".") +
+    plot_layout(guides = "collect") & theme(legend.position = "bottom")
 
-alt_maindata[, fill_factor := ifelse(Method == "Cocalibration", paste0(Method, " - ", crosswalk_to),
-    paste0(Method, " - ", crosswalk_to, " - ", ifelse(demwithedu == FALSE, "E", "OKAY"))
-)]
-alt_maindata[, fill_factor := factor(fill_factor, levels = c(
-    "Cocalibration - S1", "Cocalibration - S2",
-    "ES Crosswalking - S1 - E", "ES Crosswalking - S2 - E",
-    "ES Crosswalking - S1 - OKAY", "ES Crosswalking - S2 - OKAY"
-))]
-targetplot_alt <- get_boxplot(yvar = "bias_truth", dataset = alt_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
-
-## june version
-june_maindata[, fill_factor := ifelse(Method == "Cocalibration", paste0(Method, " - ", crosswalk_to),
-    paste0(Method, " - ", crosswalk_to, " - ", ifelse(demwithedu == FALSE, "E", "OKAY"))
-)]
-june_maindata[, fill_factor := factor(fill_factor, levels = c(
-    "Cocalibration - S1", "Cocalibration - S2",
-    "ES Crosswalking - S1 - E", "ES Crosswalking - S2 - E",
-    "ES Crosswalking - S1 - OKAY", "ES Crosswalking - S2 - OKAY"
-))]
-targetplot_june <- get_boxplot(yvar = "bias_truth", dataset = june_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
-
-## version with CI's (should be no different because only difference is CIs)
-juneCI_maindata[, fill_factor := ifelse(Method == "Cocalibration", paste0(Method, " - ", crosswalk_to),
-    paste0(Method, " - ", crosswalk_to, " - ", ifelse(demwithedu == FALSE, "E", "OKAY"))
-)]
-juneCI_maindata[, fill_factor := factor(fill_factor, levels = c(
-    "Cocalibration - S1", "Cocalibration - S2",
-    "ES Crosswalking - S1 - E", "ES Crosswalking - S2 - E",
-    "ES Crosswalking - S1 - OKAY", "ES Crosswalking - S2 - OKAY"
-))]
-targetplot_juneCI <- get_boxplot(yvar = "bias_truth", dataset = juneCI_maindata, cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
+ggsave(paste0(code_dir, "plots/Figure2_distributions_", date, ".pdf"), fig1, width = 14, height = 9)
 
 # MEAN COMPARISON --------------------------------------------------------------
 
@@ -168,30 +146,41 @@ targetplot_juneCI <- get_boxplot(yvar = "bias_truth", dataset = juneCI_maindata,
 
 ## add percent coverage for the confidence intervals
 
-get_meanplot <- function(yvar, dataset = maindata, cw_to = "S2") {
+get_meanplot <- function(yvar, dataset = maindata, cw_to = "O2", color_var = "fill_factor") {
     if (!is.na(cw_to)) {
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
-    lims <- c(dataset[, min(get(yvar))], dataset[, max(get(yvar))])
-    p <- ggplot(dataset, aes(x = x_factor, y = get(yvar), color = fill_factor)) +
-        stat_summary(
-            fun = mean,
-            geom = "point",
-            position = position_dodge(width = 0.4)
-        ) +
-        stat_summary(
-            fun.data = mean_cl_normal,
-            geom = "errorbar",
-            position = position_dodge(width = 0.4),
-            width = 0
-        ) +
+    if (color_var == "fill_factor") {
+        dataset <- dataset[dementia_generation_normal == TRUE]
+        cols <- c("#4287f5", "#4287f5", "#f06311", "#f06311")
+    } else {
+        dataset <- dataset[!is.na(get(color_var))]
+        cols <- c("#f06311", "#f06311", "#9ff160", "#9ff160")
+    }
+    # Precompute groupwise mean, sd, n, se and t-based 95% CI for the chosen yvar
+    summary_dt <- dataset[, .(
+        mean = mean(get(yvar), na.rm = TRUE),
+        sd = sd(get(yvar), na.rm = TRUE),
+        n = .N
+    ), by = c("slabel", "x_factor", color_var)]
+
+    summary_dt[, se := sd / sqrt(n)]
+    # Use t critical value with df = n-1 (guard df >= 1)
+    summary_dt[, `:=`(
+        tcrit = qt(0.975, df = pmax(n - 1, 1)),
+        lower = mean - qt(0.975, df = pmax(n - 1, 1)) * se,
+        upper = mean + qt(0.975, df = pmax(n - 1, 1)) * se
+    )]
+
+    p <- ggplot(summary_dt, aes(x = x_factor, y = mean, color = get(color_var))) +
+        geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.4)) +
         facet_wrap(~slabel, nrow = 1) +
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
-        scale_y_continuous(labels = scales::percent, breaks = c(-0.06, -0.03, 0, 0.03, 0.06)) +
+        scale_y_continuous(labels = scales::percent, breaks = scales::breaks_pretty(n = 5)) +
         # scale_color_viridis_d(name = "", option = "turbo", begin = .2, end = .8) +
-        scale_color_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311", "#9ff160", "#9ff160")) +
+        scale_color_manual(name = "", values = cols) +
         ylab("Mean Bias (95% CI)") +
         geom_hline(yintercept = 0, colour = "red", lty = 2)
     return(p)
@@ -199,31 +188,54 @@ get_meanplot <- function(yvar, dataset = maindata, cw_to = "S2") {
 
 meanplots <- lapply(c("pct_bias_sim", "pct_bias_truth"), function(y) get_meanplot(y, cw_to = NA))
 
-ggsave(paste0(code_dir, "plots/Figure4_meanplots_", date, ".pdf"), meanplots[[2]], width = 12, height = 5)
+ggsave(paste0(code_dir, "plots/Figure3_meanplots_", date, ".pdf"), meanplots[[2]], width = 14, height = 5)
+ggsave(paste0(code_dir, "plots/FigureS1_meanplots_sim_", date, ".pdf"), meanplots[[1]], width = 14, height = 5)
 
-# SECOND EDUCATION COMPARISON -----------------------------------------------------
 
-alt_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = alt_maindata, cw_to = NA)
+# EDUCATION COMPARISON -----------------------------------------------------
 
-june_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = june_maindata, cw_to = NA)
-
-juneCI_meanplot <- get_meanplot(yvar = "pct_bias_truth", dataset = juneCI_maindata, cw_to = NA)
+education_meanplot_comparison <- get_meanplot(yvar = "pct_bias_truth", cw_to = NA, color_var = "dementia_generation")
 
 # CI COVERAGE ---------------------------------------------------------------------
 
-get_coverageplot <- function(yvar = "CIcoverage", dataset = juneCI_maindata, cw_to = "S2") {
+get_coverageplot <- function(yvar = "CIcoverage", dataset = maindata, cw_to = "O2") {
     if (!is.na(cw_to)) {
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
-    dataset[, pct_coverage := mean(CIcoverage), by = c("slabel", "x_factor", "fill_factor")]
-    dataset[, num_coverage := sum(CIcoverage), by = c("slabel", "x_factor", "fill_factor")]
-    num_sims <- dataset[, .(nrep = max(rep)), by = c("slabel", "x_factor", "fill_factor")][, unique(nrep)]
-    if (length(num_sims) > 1) stop("More than one number of replicates")
-    dataset <- unique(dataset, by = c("slabel", "x_factor", "fill_factor", "pct_coverage", "num_coverage"))
-    dataset[, c("lower", "upper") := binom.confint(x = dataset[, num_coverage], n = num_sims, conf.level = 0.95, methods = "wilson")[, c("lower", "upper")]]
-    
-    p <- ggplot(dataset, aes(x = x_factor, y = pct_coverage, ymin = lower, 
-                             ymax = upper, color = fill_factor)) +
+    dataset <- dataset[dementia_generation_normal == TRUE]
+
+    group_vars <- c("slabel", "x_factor", "fill_factor")
+    coverage_dt <- dataset[,
+        {
+            covered <- get(yvar)
+
+            .(
+                num_coverage = sum(covered, na.rm = TRUE),
+                num_sims = sum(!is.na(covered)),
+                num_missing = sum(is.na(covered))
+            )
+        },
+        by = group_vars
+    ]
+
+    coverage_dt[, pct_coverage := num_coverage / num_sims]
+
+    coverage_ci <- binom.confint(
+        x = coverage_dt$num_coverage,
+        n = coverage_dt$num_sims,
+        conf.level = 0.95,
+        methods = "wilson"
+    )
+
+    coverage_dt[, `:=`(
+        lower = coverage_ci$lower,
+        upper = coverage_ci$upper
+    )]
+
+    p <- ggplot(coverage_dt, aes(
+        x = x_factor, y = pct_coverage, ymin = lower,
+        ymax = upper, color = fill_factor
+    )) +
         geom_point(position = position_dodge(width = 0.4)) +
         geom_errorbar(width = 0, position = position_dodge(width = 0.4)) +
         geom_hline(yintercept = 0.95, colour = "red", lty = 2) +
@@ -232,77 +244,20 @@ get_coverageplot <- function(yvar = "CIcoverage", dataset = juneCI_maindata, cw_
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
-        scale_y_continuous(labels = scales::percent, limits = c(0, 1)) +
-        scale_color_viridis_d(option = "plasma", begin = .2, end = .8, name = "") 
+        scale_y_continuous(
+            limits = c(0.01, 1),
+            breaks = c(0, seq(0.75, 1, by = 0.05)),
+            labels = scales::label_percent()
+        ) +
+        ggbreak::scale_y_break(
+            c(0, 0.75)
+        ) +
+        scale_color_viridis_d(option = "plasma", begin = .2, end = .8, name = "")
     return(p)
 }
 
-coverageplot <- get_coverageplot()
+coverageplot <- get_coverageplot(cw_to = NA)
+coverageplot_sim <- get_coverageplot(cw_to = NA, yvar = "CIcoverage_sim")
 
-# COMPARISON WITH MORE ITERATIONS -------------------------------------------------
-
-it1000_dt <- copy(maindata[rep <= 1000])
-it2000_dt <- copy(maindata)
-
-iteration_dt <- rbind(it1000_dt[, version := "1000 iterations"], it2000_dt[, version := "2000 iterations"])
-
-get_iterplot <- function(yvar, ylab = "Bias") {
-    data <- copy(iteration_dt)
-    lims <- c(iteration_dt[, min(get(yvar))], iteration_dt[, max(get(yvar))])
-    p <- ggplot(data, aes(x = x_factor, y = get(yvar), fill = as.factor(version))) +
-        geom_boxplot(notch = TRUE) +
-        facet_wrap(~ slabel + Method, nrow = 2) +
-        ylab("Bias") +
-        xlab("Condition") +
-        theme_bw() +
-        theme(legend.position = "bottom") +
-        scale_fill_viridis_d(option = "plasma", begin = .2, end = .8, name = "") +
-        scale_y_continuous(limits = lims, n.breaks = 6) +
-        geom_hline(yintercept = 0, colour = "red", lty = 2)
-    return(p)
-}
-
-iterplot_sim <- get_iterplot("bias_sim", ylab = "Absolute Bias \n(estimate vs. sim parameter)")
-iterplot_target <- get_iterplot("bias_truth", ylab = "Absolute Bias \n(estimate vs. target coef)")
-
-ggsave(paste0(code_dir, "plots/iterplot_sim_", date, ".jpg"), iterplot_sim, width = 12, height = 8)
-ggsave(paste0(code_dir, "plots/iterplot_target_", date, ".jpg"), iterplot_target, width = 12, height = 8)
-
-# NAIVE COMPARISON -----------------------------------------------------------
-
-naiveplots_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naive_diff") + ylab("Naive Bias - Estimated Bias"))
-
-naiveplot_box <- wrap_plots(naiveplots) +
-    plot_annotation(tag_levels = "A", tag_suffix = ".") +
-    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-
-naiveplots_bar <- lapply(c(500, 1000, 5000), function(n) get_barplot("naive_diff", n) + ylab("Naive Bias - Estimated Bias"))
-
-naiveplot_bar <- wrap_plots(naiveplots_bar) +
-    plot_annotation(tag_levels = "A", tag_suffix = ".") +
-    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-## reason why we see low means for cocalibration:
-maindata[, .(min = min(naive_diff), max = max(naive_diff)), by = c("x_factor", "Method")]
-ggplot(maindata[Method == "Cocalibration" & n_sample == 1000 & x_factor == "G1 - ES 0.2"], aes(x = coef)) +
-    geom_histogram(fill = "white", color = "black") +
-    theme_bw()
-
-## boxplot for just cogxwalkr
-naiveplots_cogx_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naive_diff", dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive Bias - Estimated Bias"))
-
-naiveplot_cogx_box <- wrap_plots(naiveplots_cogx_box) +
-    plot_annotation(tag_levels = "A", tag_suffix = ".") +
-    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-
-## barplot for just cogxwalkr
-naiveplots_cogx_bar <- lapply(c(500, 1000, 5000), function(n) get_barplot("naive_diff", n, dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive Bias - Estimated Bias"))
-
-naiveplot_cogx_bar <- wrap_plots(naiveplots_cogx_bar) +
-    plot_annotation(tag_levels = "A", tag_suffix = ".") +
-    plot_layout(ncol = 1, guides = "collect") & theme(legend.position = "bottom")
-
-## difference between naive and true effects (is this not really that big?)
-naivetrueplots_box <- lapply(c(500, 1000, 5000), function(n) get_boxplot(n, yvar = "naivetrue_diff", dataset = maindata[Method == "Cogxwalkr"]) + ylab("Naive - True Coefficient") + theme(legend.position = "none"))
-
-naivetrueplot_box <- wrap_plots(naivetrueplots_box) +
-    plot_annotation(tag_levels = "A", tag_suffix = ".")
+ggsave(paste0(code_dir, "plots/Figure4_coverageplot_", date, ".pdf"), coverageplot, width = 14, height = 5)
+ggsave(paste0(code_dir, "plots/FigureS2_coverageplot_sim_", date, ".pdf"), coverageplot_sim, width = 14, height = 5)
