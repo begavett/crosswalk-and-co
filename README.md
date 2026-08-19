@@ -12,7 +12,7 @@ A simulation study comparing **scale cocalibration** and **score crosswalking** 
 When cognitive assessments are administered to different groups (e.g., studies using different test batteries, or populations differing by language or culture), the resulting scores may not be directly comparable. Two common approaches to address this are:
 
 - **Cocalibration** — placing scores from different groups onto a common IRT scale using linking (anchor) items.
-- **Score crosswalking** — statistically mapping scores from one test to another using the [`cogxwalkr`](https://github.com/jrgant/cogxwalkr) package.
+- **Effect size crosswalking** — statistically mapping effect sizes from one test to another using the [`cogxwalkr`](https://github.com/jrgant/cogxwalkr) package.
 
 This project simulates cognitive item response data under four scenarios varying the degree of differential item functioning (DIF) and anchor item strength, then benchmarks each method's ability to recover a known education–cognition regression coefficient.
 
