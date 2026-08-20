@@ -90,10 +90,11 @@ format_data <- function(data, CI = FALSE) {
     ## get percent bias
     data[, `:=`(pct_bias_sim = bias_sim / b1, pct_bias_truth = bias_truth / b1)]
 
-    ## CI coverage if exists
+    ## CI coverage and width if exists
     if (CI == TRUE) {
         data[, CIcoverage := as.numeric(truecoefs > lwr & truecoefs < upr)]
         data[, CIcoverage_sim := as.numeric(b1 > lwr & b1 < upr)]
+        data[, CIwidth := upr - lwr]
     }
 
     return(data)
@@ -117,7 +118,7 @@ get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "O2", yla
         theme_bw() +
         theme(legend.position = "bottom") +
         # scale_fill_viridis_d(option = "turbo", begin = .2, end = .8) +
-        scale_fill_manual(name = "", values = c("#4287f5", "#4287f5", "#f06311", "#f06311", "#9ff160", "#9ff160")) +
+        scale_fill_manual(name = "", values = c("#5e7cad", "#1b3c71", "#e78147", "#d25309")) +
         scale_y_continuous(limits = lims, n.breaks = 6) +
         geom_hline(yintercept = 0, colour = "red", lty = 2)
     return(p)
@@ -146,16 +147,17 @@ ggsave(paste0(code_dir, "plots/Figure2_distributions_", date, ".pdf"), fig1, wid
 
 ## add percent coverage for the confidence intervals
 
-get_meanplot <- function(yvar, dataset = maindata, cw_to = "O2", color_var = "fill_factor") {
+get_meanplot <- function(yvar, dataset = maindata, cw_to = "O2", color_var = "fill_factor", percent_labels = TRUE,
+                         ylabel = "Mean Bias (95% CI)") {
     if (!is.na(cw_to)) {
         dataset <- copy(dataset[crosswalk_to == cw_to])
     }
     if (color_var == "fill_factor") {
         dataset <- dataset[dementia_generation_normal == TRUE]
-        cols <- c("#4287f5", "#4287f5", "#f06311", "#f06311")
+        cols <- c("#5e7cad", "#1b3c71", "#e78147", "#d25309")
     } else {
         dataset <- dataset[!is.na(get(color_var))]
-        cols <- c("#f06311", "#f06311", "#9ff160", "#9ff160")
+        cols <- c("#e78147", "#d25309", "#a1f164", "#458c0f")
     }
     # Precompute groupwise mean, sd, n, se and t-based 95% CI for the chosen yvar
     summary_dt <- dataset[, .(
@@ -172,16 +174,20 @@ get_meanplot <- function(yvar, dataset = maindata, cw_to = "O2", color_var = "fi
         upper = mean + qt(0.975, df = pmax(n - 1, 1)) * se
     )]
 
-    p <- ggplot(summary_dt, aes(x = x_factor, y = mean, color = get(color_var))) +
+    p <- ggplot(summary_dt, aes(x = x_factor, y = mean, color = get(color_var), shape = get(color_var))) +
         geom_pointrange(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.4)) +
         facet_wrap(~slabel, nrow = 1) +
         xlab("Condition") +
         theme_bw() +
         theme(legend.position = "bottom") +
-        scale_y_continuous(labels = scales::percent, breaks = scales::breaks_pretty(n = 5)) +
+        scale_shape_manual(name = "", values = c(16, 16, 17, 17)) +
+        scale_y_continuous(
+            labels = if (percent_labels) scales::label_percent() else ggplot2::waiver(),
+            breaks = scales::breaks_pretty(n = 5)
+        ) +
         # scale_color_viridis_d(name = "", option = "turbo", begin = .2, end = .8) +
         scale_color_manual(name = "", values = cols) +
-        ylab("Mean Bias (95% CI)") +
+        ylab(ylabel) +
         geom_hline(yintercept = 0, colour = "red", lty = 2)
     return(p)
 }
@@ -234,7 +240,7 @@ get_coverageplot <- function(yvar = "CIcoverage", dataset = maindata, cw_to = "O
 
     p <- ggplot(coverage_dt, aes(
         x = x_factor, y = pct_coverage, ymin = lower,
-        ymax = upper, color = fill_factor
+        ymax = upper, color = fill_factor, shape = fill_factor
     )) +
         geom_point(position = position_dodge(width = 0.4)) +
         geom_errorbar(width = 0, position = position_dodge(width = 0.4)) +
@@ -252,7 +258,8 @@ get_coverageplot <- function(yvar = "CIcoverage", dataset = maindata, cw_to = "O
         ggbreak::scale_y_break(
             c(0, 0.75)
         ) +
-        scale_color_viridis_d(option = "plasma", begin = .2, end = .8, name = "")
+        scale_shape_manual(name = "", values = c(16, 16, 17, 17)) +
+        scale_color_manual(name = "", values = c("#5e7cad", "#1b3c71", "#e78147", "#d25309"))
     return(p)
 }
 
@@ -260,4 +267,9 @@ coverageplot <- get_coverageplot(cw_to = NA)
 coverageplot_sim <- get_coverageplot(cw_to = NA, yvar = "CIcoverage_sim")
 
 ggsave(paste0(code_dir, "plots/Figure4_coverageplot_", date, ".pdf"), coverageplot, width = 14, height = 5)
-ggsave(paste0(code_dir, "plots/FigureS2_coverageplot_sim_", date, ".pdf"), coverageplot_sim, width = 14, height = 5)
+
+# CI WIDTH ------------------------------------------------------------------
+
+maindata[, .(ciwidth = mean(CIwidth), cicoverage = mean(CIcoverage)), by = c("slabel", "x_factor", "fill_factor")]
+widthplot <- get_meanplot(yvar = "CIwidth", cw_to = NA, percent_labels = FALSE, ylabel = "Mean CI Width")
+ggsave(paste0(code_dir, "plots/FigureS2_CIwidth_", date, ".pdf"), widthplot, width = 14, height = 5)
