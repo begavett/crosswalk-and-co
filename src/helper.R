@@ -42,208 +42,221 @@ cocalibrate <- function(rg_dat,
                         rg_items,
                         fg_items,
                         rg_num) {
-  
-  library(mirt)
-  library(dplyr)
-  library(magrittr)
-  
-  linking_items <- intersect(rg_items, fg_items)
-  
-  if(length(linking_items) == 0) stop ("No linking items")
-  
-  mirt_rg <- mirt(data = rg_dat %>%
-                    select(all_of(rg_items)),
-                  model = 1,
-                  itemtype = "graded",
-                  technical = list(NCYCLES = 5000),
-                  verbose = FALSE)
-  
-  itembank_rg <- data.frame(coef(mirt_rg, simplify = TRUE)$items) %>%
-    mutate(item = rownames(.))
-  
-  linking_itembank_rg <- itembank_rg %>%
-    filter(item %in% linking_items)
-  
-  # multipleGroup estimates parameters using all data,
-  # which I don't think is right
-  # I think we want to estimate parameters in Group 1 first
-  # Otherwise the estimated paramters in a MG model will be based on
-  # both G1 and G2 data
-  # mirt_mg <- multipleGroup(data = bind_rows(rg_dat, fg_dat) %>%
-  #                 select(all_of(union(rg_items, fg_items))),
-  #               model = 1,
-  #               group = c(rg_dat$Group, fg_dat$Group),
-  #               itemtype = "graded",
-  #               invariance = c(linking_items, "free_means", "free_vars"), SE = TRUE)
-  # 
-  # coef(mirt_mg, simplify = TRUE)
-  # fscores(mirt_mg, full.scores.SE = TRUE)
-  
-  
-  mirt_fg0 <- mirt(data = fg_dat %>%
-                     select(all_of(fg_items)),
-                   model = 1,
-                   itemtype = "graded",
-                   pars = "values",
-                   technical = list(NCYCLES = 5000),
-                   verbose = FALSE)
-  
-  mirt_fg0_partable <- mirt_fg0
-  
-  for(i in linking_items) {
     
-    i_pars <- linking_itembank_rg %>%
-      t() %>%
-      data.frame() %>%
-      mutate(par = rownames(.)) %>%
-      select(all_of(i), par) %>%
-      filter(!is.na(!!sym(i))) %>%
-      slice(1:(n()-1)) %>%
-      pull(par)
+    library(mirt)
+    library(dplyr)
+    library(magrittr)
     
-    for(p in i_pars) {
-      mirt_fg0_partable$value[mirt_fg0_partable$item == i & mirt_fg0_partable$name == p] <- linking_itembank_rg[i, p]
-      mirt_fg0_partable$est[mirt_fg0_partable$item == i & mirt_fg0_partable$name == p] <- FALSE
+    linking_items <- intersect(rg_items, fg_items)
+    
+    if(length(linking_items) == 0) stop ("No linking items")
+    
+    mirt_rg <- mirt(data = rg_dat %>%
+                        select(all_of(rg_items)),
+                    model = 1,
+                    itemtype = "graded",
+                    technical = list(NCYCLES = 5000),
+                    verbose = FALSE)
+    
+    itembank_rg <- data.frame(coef(mirt_rg, simplify = TRUE)$items) %>%
+        mutate(item = rownames(.))
+    
+    linking_itembank_rg <- itembank_rg %>%
+        filter(item %in% linking_items)
+    
+                                        # multipleGroup estimates parameters using all data,
+                                        # which I don't think is right
+                                        # I think we want to estimate parameters in Group 1 first
+                                        # Otherwise the estimated paramters in a MG model will be based on
+                                        # both G1 and G2 data
+                                        # mirt_mg <- multipleGroup(data = bind_rows(rg_dat, fg_dat) %>%
+                                        #                 select(all_of(union(rg_items, fg_items))),
+                                        #               model = 1,
+                                        #               group = c(rg_dat$Group, fg_dat$Group),
+                                        #               itemtype = "graded",
+                                        #               invariance = c(linking_items, "free_means", "free_vars"), SE = TRUE)
+                                        # 
+                                        # coef(mirt_mg, simplify = TRUE)
+                                        # fscores(mirt_mg, full.scores.SE = TRUE)
+    
+    
+    mirt_fg0 <- mirt(data = fg_dat %>%
+                         select(all_of(fg_items)),
+                     model = 1,
+                     itemtype = "graded",
+                     pars = "values",
+                     technical = list(NCYCLES = 5000),
+                     verbose = FALSE)
+    
+    mirt_fg0_partable <- mirt_fg0
+    
+    for(i in linking_items) {
+        
+        i_pars <- linking_itembank_rg %>%
+            t() %>%
+            data.frame() %>%
+            mutate(par = rownames(.)) %>%
+            select(all_of(i), par) %>%
+            filter(!is.na(!!sym(i))) %>%
+            slice(1:(n()-1)) %>%
+            pull(par)
+        
+        for(p in i_pars) {
+            mirt_fg0_partable$value[mirt_fg0_partable$item == i & mirt_fg0_partable$name == p] <- linking_itembank_rg[i, p]
+            mirt_fg0_partable$est[mirt_fg0_partable$item == i & mirt_fg0_partable$name == p] <- FALSE
+        }
+        
+        mirt_fg0_partable$est[mirt_fg0_partable$name == "MEAN_1"] <- TRUE
+        mirt_fg0_partable$est[mirt_fg0_partable$name == "COV_11"] <- TRUE
     }
     
-    mirt_fg0_partable$est[mirt_fg0_partable$name == "MEAN_1"] <- TRUE
-    mirt_fg0_partable$est[mirt_fg0_partable$name == "COV_11"] <- TRUE
-  }
-  
-  mirt_fg <- mirt(data = fg_dat %>%
-                    select(all_of(fg_items)),
-                  model = 1,
-                  itemtype = "graded",
-                  pars = mirt_fg0_partable,
-                  technical = list(NCYCLES = 5000),
-                  verbose = FALSE)
-  
-  coef(mirt_rg, simplify = TRUE)
-  coef(mirt_fg, simplify = TRUE)
-  
-  if (rg_num == 1) {
-    fscores_rg <- data.frame(fscores(mirt_rg, full.scores.SE = TRUE)) %>%
-      mutate(Group = "Group 1")
-    fscores_fg <- data.frame(fscores(mirt_fg, full.scores.SE = TRUE)) %>%
-      mutate(Group = "Group 2")
-  } else if (rg_num == 2) {
-    fscores_rg <- data.frame(fscores(mirt_rg, full.scores.SE = TRUE)) %>%
-      mutate(Group = "Group 2")
-    fscores_fg <- data.frame(fscores(mirt_fg, full.scores.SE = TRUE)) %>%
-      mutate(Group = "Group 1")
-  }
-  
-  return(list(mirt_rg = mirt_rg, 
-              mirt_fg = mirt_fg, 
-              fscores_rg = fscores_rg, 
-              fscores_fg = fscores_fg,
-              linking_items = linking_items))
+    mirt_fg <- mirt(data = fg_dat %>%
+                        select(all_of(fg_items)),
+                    model = 1,
+                    itemtype = "graded",
+                    pars = mirt_fg0_partable,
+                    technical = list(NCYCLES = 5000),
+                    verbose = FALSE)
+    
+    coef(mirt_rg, simplify = TRUE)
+    coef(mirt_fg, simplify = TRUE)
+    
+    if (rg_num == 1) {
+        fscores_rg <- data.frame(fscores(mirt_rg, full.scores.SE = TRUE)) %>%
+            mutate(Group = "Group 1")
+        fscores_fg <- data.frame(fscores(mirt_fg, full.scores.SE = TRUE)) %>%
+            mutate(Group = "Group 2")
+    } else if (rg_num == 2) {
+        fscores_rg <- data.frame(fscores(mirt_rg, full.scores.SE = TRUE)) %>%
+            mutate(Group = "Group 2")
+        fscores_fg <- data.frame(fscores(mirt_fg, full.scores.SE = TRUE)) %>%
+            mutate(Group = "Group 1")
+    }
+    
+    return(list(mirt_rg = mirt_rg, 
+                mirt_fg = mirt_fg, 
+                fscores_rg = fscores_rg, 
+                fscores_fg = fscores_fg,
+                linking_items = linking_items))
 }
 
 
-# cocalibrated_regressions ------------------------------------------------
-#
-# Description:
-#   Fits parallel linear regressions in two groups to estimate how education 
-#   (edu) predicts memory factor scores for a given scenario, and extracts 
-#   the group-specific regression coefficients as a basis for crosswalks.
-#
-# Arguments:
-#   scenario - A numeric or character identifier for the scenario of interest. 
-#              Used to dynamically construct the outcome variable name in the 
-#              form "S[scenario]_Mem_FS".
-#
-# Process:
-#   1. Builds a regression formula: "S[scenario]_Mem_FS ~ edu".
-#   2. Fits the model separately in Group 1 and Group 2 using the dataset 
-#      'mem_fscores'.
-#   3. Extracts the coefficient for 'edu' in each group using the 
-#      'parameters' package and converts results to a data.table.
-#   4. Creates a crosswalk-style table showing, for each scenario, the 
-#      coefficient linking education to memory scores in each group.
-#   5. Merges the results with a 'scenario_labels' lookup table for clarity.
-#
-# Returns:
-#   A data.table with the following columns:
-#     - scenario     : Scenario identifier.
-#     - crosswalk_to : The target group for crosswalk comparison.
-#     - coef         : Regression coefficient for 'edu' in the given group.
-#     - (plus any additional labels from 'scenario_labels').
-#
-# Notes:
-#   - Assumes 'mem_fscores' contains the variables:
-#       * S[scenario]_Mem_FS (memory factor score for the scenario)
-#       * edu (education variable)
-#       * Group (with at least "Group 1" and "Group 2")
-#   - Relies on 'parameters::model_parameters()' for standardized extraction 
-#     of model results.
+                                        # cocalibrated_regressions ------------------------------------------------
+                                        #
+                                        # Description:
+                                        #   Fits parallel linear regressions in two groups to estimate how education 
+                                        #   (edu) predicts memory factor scores for a given scenario, and extracts 
+                                        #   the group-specific regression coefficients as a basis for crosswalks.
+                                        #
+                                        # Arguments:
+                                        #   scenario - A numeric or character identifier for the scenario of interest. 
+                                        #              Used to dynamically construct the outcome variable name in the 
+                                        #              form "S[scenario]_Mem_FS".
+                                        #
+                                        # Process:
+                                        #   1. Builds a regression formula: "S[scenario]_Mem_FS ~ edu".
+                                        #   2. Fits the model separately in Group 1 and Group 2 using the dataset 
+                                        #      'mem_fscores'.
+                                        #   3. Extracts the coefficient for 'edu' in each group using the 
+                                        #      'parameters' package and converts results to a data.table.
+                                        #   4. Creates a crosswalk-style table showing, for each scenario, the 
+                                        #      coefficient linking education to memory scores in each group.
+                                        #   5. Merges the results with a 'scenario_labels' lookup table for clarity.
+                                        #
+                                        # Returns:
+                                        #   A data.table with the following columns:
+                                        #     - scenario     : Scenario identifier.
+                                        #     - crosswalk_to : The target group for crosswalk comparison.
+                                        #     - coef         : Regression coefficient for 'edu' in the given group.
+                                        #     - (plus any additional labels from 'scenario_labels').
+                                        #
+                                        # Notes:
+                                        #   - Assumes 'mem_fscores' contains the variables:
+                                        #       * S[scenario]_Mem_FS (memory factor score for the scenario)
+                                        #       * edu (education variable)
+                                        #       * Group (with at least "Group 1" and "Group 2")
+                                        #   - Relies on 'parameters::model_parameters()' for standardized extraction 
+                                        #     of model results.
 
 cocalibrated_regressions <- function(scenario, factorscores = mem_fscores) {
-  library(parameters)
-  library(data.table)
-  
-  model_formula <- as.formula(paste0("S", scenario, "_Mem_FS ~ edu"))
-  
-  g1_model <- lm(model_formula, data = factorscores[Group == "Group 1"])
-  g1_params <- as.data.table(parameters::model_parameters(g1_model))
-  
-  g2_model <- lm(model_formula, data = factorscores[Group == "Group 2"])
-  g2_params <- as.data.table(parameters::model_parameters(g2_model))
-  
-  result <- data.table(scenario = scenario, 
-                       crosswalk_to = c("Group 2", "Group 1"), 
-                       coef = c(g1_params$Coefficient[g1_params$Parameter == "edu"], 
-                                g2_params$Coefficient[g2_params$Parameter == "edu"]))
-  result <- merge(result, scenario_labels, by = "scenario")                              
-  
-  return(result)                               
+    library(parameters)
+    library(data.table)
+    
+    model_formula <- as.formula(paste0("S", scenario, "_Mem_FS ~ edu"))
+    
+    g1_model <- lm(model_formula, data = factorscores[Group == "Group 1"])
+    g1_params <- as.data.table(parameters::model_parameters(g1_model))
+    
+    g2_model <- lm(model_formula, data = factorscores[Group == "Group 2"])
+    g2_params <- as.data.table(parameters::model_parameters(g2_model))
+    
+    result <- data.table(scenario = scenario, 
+                         crosswalk_to = c("Group 2", "Group 1"), 
+                         coef = c(g1_params$Coefficient[g1_params$Parameter == "edu"], 
+                                  g2_params$Coefficient[g2_params$Parameter == "edu"]),
+                         lwr = c(g1_params$CI_low[g1_params$Parameter == "edu"], 
+                                 g2_params$CI_low[g2_params$Parameter == "edu"]),
+                         upr = c(g1_params$CI_high[g1_params$Parameter == "edu"], 
+                                 g2_params$CI_high[g2_params$Parameter == "edu"]))
+    result <- merge(result, scenario_labels, by = "scenario")                              
+    
+    return(result)                               
 }
 
 
-# getcrosswalk ------------------------------------------------------------
-#
-# Description:
-#   Creates a score crosswalk between two cognitive measures, optionally
-#   conditioned on dementia status, to enable score comparability across tests.
-#
-# Arguments:
-#   groupdata - A data frame containing the cognitive measures of interest 
-#               and a dementia indicator variable.
-#   cog1      - A character string giving the column name of the first 
-#               cognitive measure.
-#   cog2      - A character string giving the column name of the second 
-#               cognitive measure.
-#
-# Process:
-#   1. Subsets 'groupdata' to include only the two measures and the Dementia variable.
-#   2. Runs the crosswalk procedure using the 'crosswalk' function, 
-#      conditioning on Dementia status and looping across levels if specified.
-#   3. (Optional) Control parameters such as bootstrap replications, 
-#      random seed, and parallel cores can be set in 'control'.
-#
-# Returns:
-#   An object from the 'crosswalk' function containing the estimated 
-#   crosswalk between the two measures.
-#
-# Notes:
-#   - The Dementia variable is assumed to exist in 'groupdata' and is 
-#     used as a conditioning variable.
-#   - The 'crosswalk' function handles the statistical mapping between 
-#     the two cognitive measures.
+                                        # getcrosswalk ------------------------------------------------------------
+                                        #
+                                        # Description:
+                                        #   Creates a score crosswalk between two cognitive measures, optionally
+                                        #   conditioned on dementia status, to enable score comparability across tests.
+                                        #
+                                        # Arguments:
+                                        #   groupdata - A data frame containing the cognitive measures of interest 
+                                        #               and a dementia indicator variable.
+                                        #   cog1      - A character string giving the column name of the first 
+                                        #               cognitive measure.
+                                        #   cog2      - A character string giving the column name of the second 
+                                        #               cognitive measure.
+                                        #
+                                        # Process:
+                                        #   1. Subsets 'groupdata' to include only the two measures and the Dementia variable.
+                                        #   2. Runs the crosswalk procedure using the 'crosswalk' function, 
+                                        #      conditioning on Dementia status and looping across levels if specified.
+                                        #   3. (Optional) Control parameters such as bootstrap replications, 
+                                        #      random seed, and parallel cores can be set in 'control'.
+                                        #
+                                        # Returns:
+                                        #   An object from the 'crosswalk' function containing the estimated 
+                                        #   crosswalk between the two measures.
+                                        #
+                                        # Notes:
+                                        #   - The Dementia variable is assumed to exist in 'groupdata' and is 
+                                        #     used as a conditioning variable.
+                                        #   - The 'crosswalk' function handles the statistical mapping between 
+                                        #     the two cognitive measures.
 
-getcrosswalk <- function(groupdata, cog1, cog2)
+getcrosswalk <- function(dat, cog1, cog2, iter, condvar, CI = FALSE)
 {
-  library(cogxwalkr)
-  library(dplyr)
-  library(magrittr)
-  groupdata <- groupdata %>% select(all_of(c(cog1, cog2)), Dementia)
-  crswkout <- crosswalk(cog1, cog2, condition_by = "Dementia",
-                        condition_loop = TRUE, data = groupdata)
-  ##control = list(nboot = 100, seed = 42, ncores = 4L)
+    library(cogxwalkr)
+    library(dplyr)
+    library(magrittr)
+    dat <- dat %>% select(all_of(c(cog1, cog2)), Dementia)
+    crswkout <- do.call(crosswalk,
+                        list(cog1 = cog1,
+                             cog2 = cog2,
+                             condition_by = condvar,
+                             condition_loop = TRUE,
+                             data = dat,
+                             control = if(CI) {list(nboot = 500, seed = iter, ncores = 1L)
+                                       } else {NULL}))
+    ## crosswalk(cog1, cog2, condition_by = "Dementia",
+    ##                       condition_loop = TRUE, data = dat,
+    ##                       control = list(nboot = 500, seed = iter, ncores = 1L))
+    ##control = list(nboot = 100, seed = 42, ncores = 4L)
 }
 
 
-# get_scenario_data -------------------------------------------------------
+                                        # get_scenario_data -------------------------------------------------------
 
 #' Extract scenario-specific item response data
 #'
@@ -285,69 +298,82 @@ getcrosswalk <- function(groupdata, cog1, cog2)
 #'
 
 get_scenario_data <- function(scenario_num, data = mem_fscores, i_l = item_lists, combs = combos){
-  subset <- copy(data)
-  
-  ## get items
-  items_group1 <- i_l[[combs[s == scenario_num & g == 1, id]]]
-  items_group2 <- i_l[[combs[s == scenario_num & g == 2, id]]]
-  items <- unique(c(items_group1, items_group2))
-  
-  ## get subset of variables
-  subset <- subset[, c("theta", "edu", "Mem_FS", "Mem_FS_SE", "Group", "Dementia", items), with = FALSE]
-  
-  ## set missingness for variables only in one group
-  # subset[Group == "Group 1", setdiff(items, items_group1) := NA]
-  # subset[Group == "Group 2", setdiff(items, items_group2) := NA]
-  
-  return(subset)
+    subset <- copy(data)
+    
+    ## get items
+    items_group1 <- i_l[[combs[s == scenario_num & g == 1, id]]]
+    items_group2 <- i_l[[combs[s == scenario_num & g == 2, id]]]
+    items <- unique(c(items_group1, items_group2))
+    
+    ## get subset of variables
+    subset <- subset[, c("theta", "edu", "Mem_FS", "Mem_FS_SE", "Group", "Dementia", "Dementia_noedu", items), with = FALSE]
+    
+    ## set missingness for variables only in one group
+                                        # subset[Group == "Group 1", setdiff(items, items_group1) := NA]
+                                        # subset[Group == "Group 2", setdiff(items, items_group2) := NA]
+    
+    return(subset)
 }
 
-# getscore ----------------------------------------------------------------
-#
-# Description:
-#   Fits a unidimensional graded response IRT model to a set of items and 
-#   appends the resulting factor scores to the original dataset.
-#
-# Arguments:
-#   scendat  - A data frame containing the item responses (and any other variables).
-#   itemnms  - A character vector of column names in 'scendat' that represent 
-#              the item responses to be modeled.
-#   scorenm  - A character string specifying the name to assign to the 
-#              newly created factor score column.
-#
-# Process:
-#   1. Selects the item columns from the dataset.
-#   2. Fits a 1-factor graded response model using the mirt package.
-#   3. Extracts factor scores (no standard errors).
-#   4. Renames the score column as specified in 'scorenm'.
-#   5. Binds the score back to the original dataset.
-#
-# Returns:
-#   A data frame identical to 'scendat' but with an added column containing 
-#   the estimated factor scores.
-#
-# Notes:
-#   - By default, the model is unidimensional with graded response items.
-#   - The function uses 5000 EM cycles to help ensure convergence.
+                                        # getscore ----------------------------------------------------------------
+                                        #
+                                        # Description:
+                                        #   Fits a unidimensional graded response IRT model to a set of items and 
+                                        #   appends the resulting factor scores to the original dataset.
+                                        #
+                                        # Arguments:
+                                        #   scendat  - A data frame containing the item responses (and any other variables).
+                                        #   itemnms  - A character vector of column names in 'scendat' that represent 
+                                        #              the item responses to be modeled.
+                                        #   scorenm  - A character string specifying the name to assign to the 
+                                        #              newly created factor score column.
+                                        #
+                                        # Process:
+                                        #   1. Selects the item columns from the dataset.
+                                        #   2. Fits a 1-factor graded response model using the mirt package.
+                                        #   3. Extracts factor scores (no standard errors).
+                                        #   4. Renames the score column as specified in 'scorenm'.
+                                        #   5. Binds the score back to the original dataset.
+                                        #
+                                        # Returns:
+                                        #   A data frame identical to 'scendat' but with an added column containing 
+                                        #   the estimated factor scores.
+                                        #
+                                        # Notes:
+                                        #   - By default, the model is unidimensional with graded response items.
+                                        #   - The function uses 5000 EM cycles to help ensure convergence.
 
 getscore <- function(scendat, itemnms, scorenm)
 {
-  library(dplyr)
-  library(magrittr)
-  library(mirt)
-  data <- scendat %>% select(all_of(itemnms)) 
-  mirtout <- mirt(data, model = 1, itemtype = "graded",
-                  technical = list(NCYCLES = 5000),
-                  verbose = FALSE)
-  score <- fscores(mirtout, full.scores.SE = FALSE)
-  colnames(score) <- scorenm
-  scendat <- cbind.data.frame(scendat, score)
-  ## left_join(cbind.data.frame(score, ID = data$ID), by = "ID")
-  return(scendat)
+    library(dplyr)
+    library(magrittr)
+    library(mirt)
+    data <- scendat %>% select(all_of(itemnms)) 
+    mirtout <- mirt(data, model = 1, itemtype = "graded",
+                    technical = list(NCYCLES = 5000),
+                    verbose = FALSE)
+    score <- fscores(mirtout, full.scores.SE = FALSE)
+    colnames(score) <- scorenm
+    scendat <- cbind.data.frame(scendat, score)
+    ## left_join(cbind.data.frame(score, ID = data$ID), by = "ID")
+    return(scendat)
 }
 
 
-# simCog ------------------------------------------------------------------
+
+getsumscore <- function(scendat, itemnms, scorenm)
+{
+    library(dplyr)
+    data <- scendat %>% select(all_of(itemnms))
+    score <- data.frame(sumscore = rowSums(data))
+    colnames(score) <- scorenm
+    scendat <- cbind.data.frame(scendat, score)
+    return(scendat)
+}
+    
+
+
+                                        # simCog ------------------------------------------------------------------
 
 #' Simulate cognitive test data under an IRT framework
 #'
@@ -401,58 +427,62 @@ getscore <- function(scendat, itemnms, scorenm)
 #'
 
 simCog <- function(itempars, itemnames, prop_high_edu = .3, b0 = 0, b1 = .2, n_sample = 500, cogname = "Mem", groupname) {
-  
-  library(simDAG)
-  library(dplyr)
-  library(magrittr)
-  
-  itemtypes <- itempars %>%
-    select(starts_with("d")) %>%
-    rowwise() %>%
-    mutate(nThresh = sum(!is.na(c_across(everything())))) %>%
-    ungroup() %>%
-    mutate(itemtype = ifelse(nThresh == 1, "dich", "graded")) %>%
-    pull(itemtype)
-  
-  edu <- simDAG::rbernoulli(n_sample, p = prop_high_edu, output = "numeric")
-  var_edu <- prop_high_edu * (1 - prop_high_edu)
-  sigma2 <- 1 - (b1^2 * var_edu)
-  sigma <- sqrt(sigma2)
-  
-  thetas <- b0 + b1*edu + rnorm(n_sample, mean = 0, sd = sigma)
-  thetas_df <- data.frame(theta = thetas, edu = edu)
-  
-  # describe(thetas_df)
-  
-  
-  sim_item_resp <- mirt::simdata(a = data.matrix(itempars %>% pull(a1)),
-                                 d = as.vector(itempars %>% dplyr::select(starts_with("d"))) %>%
-                                   unlist() %>%
-                                   as.numeric() %>%
-                                   matrix(nrow = nrow(itempars %>% dplyr::select(starts_with("d"))), byrow = FALSE),
-                                 itemtype = itemtypes,
-                                 Theta = data.matrix(thetas)) %>%
-    as_tibble() %>%
-    set_names(itemnames)
-  
-  cog_mirt <- mirt(data = sim_item_resp, model = paste0(cogname, ' = 1-', ncol(sim_item_resp)),
-                   itemtype = "graded",
-                   technical = list(NCYCLES = 5000),
-                   verbose = FALSE)
-  
-  sim_item_resp <- fscores(cog_mirt, full.scores.SE = TRUE) %>%
-    data.frame() %>%
-    set_names(paste0(cogname, c("_FS", "_FS_SE"))) %>%
-    bind_cols(sim_item_resp)
-  
-  cog_fscores <- bind_cols(thetas_df, sim_item_resp) %>%
-    mutate(Group = groupname)
-  
-  return(cog_fscores)
+    
+    library(simDAG)
+    library(dplyr)
+    library(magrittr)
+
+    cat("started sim \n")
+    itemtypes <- itempars %>%
+        select(starts_with("d")) %>%
+        rowwise() %>%
+        mutate(nThresh = sum(!is.na(c_across(everything())))) %>%
+        ungroup() %>%
+        mutate(itemtype = ifelse(nThresh == 1, "dich", "graded")) %>%
+        pull(itemtype)
+    cat("itemtype\n")
+
+    
+    
+    edu <- simDAG::rbernoulli(n_sample, p = prop_high_edu, output = "numeric")
+    var_edu <- prop_high_edu * (1 - prop_high_edu)
+    sigma2 <- 1 - (b1^2 * var_edu)
+    sigma <- sqrt(sigma2)
+    
+    thetas <- b0 + b1*edu + rnorm(n_sample, mean = 0, sd = sigma)
+    thetas_df <- data.frame(theta = thetas, edu = edu)
+    
+                                        # describe(thetas_df)
+    
+    
+    sim_item_resp <- mirt::simdata(a = data.matrix(itempars %>% pull(a1)),
+                                   d = as.vector(itempars %>% dplyr::select(starts_with("d"))) %>%
+                                       unlist() %>%
+                                       as.numeric() %>%
+                                       matrix(nrow = nrow(itempars %>% dplyr::select(starts_with("d"))), byrow = FALSE),
+                                   itemtype = itemtypes,
+                                   Theta = data.matrix(thetas)) %>%
+        as_tibble() %>%
+        set_names(itemnames)
+    
+    cog_mirt <- mirt(data = sim_item_resp, model = paste0(cogname, ' = 1-', ncol(sim_item_resp)),
+                     itemtype = "graded",
+                     technical = list(NCYCLES = 5000),
+                     verbose = FALSE)
+    
+    sim_item_resp <- fscores(cog_mirt, full.scores.SE = TRUE) %>%
+        data.frame() %>%
+        set_names(paste0(cogname, c("_FS", "_FS_SE"))) %>%
+        bind_cols(sim_item_resp)
+    
+    cog_fscores <- bind_cols(thetas_df, sim_item_resp) %>%
+        mutate(Group = groupname)
+    
+    return(cog_fscores)
 }
 
 
-# sim_cwxco ---------------------------------------------------------------
+                                        # sim_cwxco ---------------------------------------------------------------
 
 #' Simulate and compare cocalibration vs. crosswalk approaches
 #'
@@ -497,456 +527,537 @@ simCog <- function(itempars, itemnames, prop_high_edu = .3, b0 = 0, b1 = .2, n_s
 #'
 #'
 
-sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9, dem_on_edu = FALSE) {
-  
-  library(purrr)
-  
-  set.seed(iter)
-  
-  # Group 1 -----------------------------------------------------------------
-  
-  Loadings_M_G1 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
-                              sheet = "b_m") %>%
-    select(a)
-  
-  Thresholds_M_G1 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
+sim_cwxco <- function(iter = 1, N = 5002, prop_high_edu = .30, b0 = 0, b1 = .2, dem_prob_cut = .9, CI = FALSE) {
+    #, dem_on_edu = FALSE
+    cat("function start")
+
+
+
+    cat("before recode")		 
+    RecodedItemName_M <- read.csv(paste0(code_dir, "data/RecodedItemName_m.csv"))
+    str(RecodedItemName_M)
+    RecodedItemName_M
+    useMemItems <- which(!grepl("^rav.+b$", RecodedItemName_M %>% pull(RecodedItemName)))
+    str(useMemItems)
+    ItemNames <- RecodedItemName_M %>%
+        slice(useMemItems) %>%
+        pull(RecodedItemName)
+    ItemNames
+
+
+    
+    library(purrr)
+
+            cat("purrr done")
+        set.seed(iter)
+        
+    
+                                        # Group 1 -----------------------------------------------------------------
+    
+    Loadings_M_G1 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
                                 sheet = "b_m") %>%
-    select(-a, -RecodedItemName)
-  
-  item_pars_M_G1 <- traditional2mirt(bind_cols(Loadings_M_G1, Thresholds_M_G1), 
-                                     "graded", 
-                                     ncat = ncol(Thresholds_M_G1) + 1) 
-  
-  
-  mem_fscores_G1 <- simCog(itempars = item_pars_M_G1, 
-                           itemnames = ItemNames, 
-                           prop_high_edu = prop_high_edu, 
-                           b0 = b0, 
-                           b1 = b1, 
-                           n_sample = N, 
-                           cogname = "Mem", 
-                           groupname = "Group 1")
-  
-  
-  # Group 2 -----------------------------------------------------------------
-  
-  Loadings_M_G2 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
-                              sheet = "b_m_group2") %>%
-    select(a = a_dif)
-  
-  Thresholds_M_G2 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
+        select(a)
+    
+    Thresholds_M_G1 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
+                                  sheet = "b_m") %>%
+        select(-a, -RecodedItemName)
+
+            cat("before mirt conversion function")
+    item_pars_M_G1 <- traditional2mirt(bind_cols(Loadings_M_G1, Thresholds_M_G1), 
+                                       "graded", 
+                                       ncat = ncol(Thresholds_M_G1) + 1) 
+
+    cat("before group 1 sim")
+    
+    mem_fscores_G1 <- simCog(itempars = item_pars_M_G1, 
+                             itemnames = ItemNames, 
+                             prop_high_edu = prop_high_edu, 
+                             b0 = b0, 
+                             b1 = b1, 
+                             n_sample = N, 
+                             cogname = "Mem", 
+                             groupname = "Group 1")
+    cat("after group 1")
+    
+                                        # Group 2 -----------------------------------------------------------------
+    
+    Loadings_M_G2 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
                                 sheet = "b_m_group2") %>%
-    select(ends_with("_dif"), -DIF, -a_dif)
-  
-  item_pars_M_G2 <- traditional2mirt(bind_cols(Loadings_M_G2, Thresholds_M_G2), 
-                                     "graded", 
-                                     ncat = ncol(Thresholds_M_G2) + 1)
-  
-  mem_fscores_G2 <- simCog(itempars = item_pars_M_G2, 
-                           itemnames = ItemNames, 
-                           prop_high_edu = prop_high_edu, 
-                           b0 = b0, 
-                           b1 = b1, 
-                           n_sample = N, 
-                           cogname = "Mem", 
-                           groupname = "Group 2")
-  
-  # Group 3 -----------------------------------------------------------------
-  
-  Loadings_M_G3 <- tibble(
-    a = map2_dbl(Loadings_M_G1$a, Loadings_M_G2$a, function(x, y) {
-      if (is.na(x) && is.na(y)) return(NA_real_)
-      if (is.na(x)) return(y)
-      if (is.na(y)) return(x)
-      # both present — randomly pick one
-      sample(c(x, y), 1)
-    })
-  )
-  
-  Thresholds_M_G3 <- map2_dfr(
-    split(Thresholds_M_G1, seq_len(nrow(Thresholds_M_G1))),
-    split(Thresholds_M_G2 %>% set_names(paste0("b", 1:ncol(.))), seq_len(nrow(Thresholds_M_G2))),
-    ~ {
-      all_na1 <- all(is.na(.x))
-      all_na2 <- all(is.na(.y))
-      
-      if (all_na1 && all_na2) return(NULL)  # drop both missing
-      if (all_na1) return(.y)
-      if (all_na2) return(.x)
-      
-      # both have some non-NA: randomly pick one
-      if (runif(1) < 0.5) .x else .y
+        select(a = a_dif)
+    
+    Thresholds_M_G2 <- read_excel(paste0(code_dir, "data/b_m.xlsx"), 
+                                  sheet = "b_m_group2") %>%
+        select(ends_with("_dif"), -DIF, -a_dif)
+    
+    item_pars_M_G2 <- traditional2mirt(bind_cols(Loadings_M_G2, Thresholds_M_G2), 
+                                       "graded", 
+                                       ncat = ncol(Thresholds_M_G2) + 1)
+    
+    mem_fscores_G2 <- simCog(itempars = item_pars_M_G2, 
+                             itemnames = ItemNames, 
+                             prop_high_edu = prop_high_edu, 
+                             b0 = b0, 
+                             b1 = b1, 
+                             n_sample = N, 
+                             cogname = "Mem", 
+                             groupname = "Group 2")
+    
+                                        # Group 3 -----------------------------------------------------------------
+    cat("before group 3 sim")
+    
+    Loadings_M_G3 <- tibble(
+        a = map2_dbl(Loadings_M_G1$a, Loadings_M_G2$a, function(x, y) {
+            if (is.na(x) && is.na(y)) return(NA_real_)
+            if (is.na(x)) return(y)
+            if (is.na(y)) return(x)
+                                        # both present — randomly pick one
+            sample(c(x, y), 1)
+        })
+    )
+    
+    Thresholds_M_G3 <- map2_dfr(
+        split(Thresholds_M_G1, seq_len(nrow(Thresholds_M_G1))),
+        split(Thresholds_M_G2 %>% set_names(paste0("b", 1:ncol(.))), seq_len(nrow(Thresholds_M_G2))),
+        ~ {
+            all_na1 <- all(is.na(.x))
+            all_na2 <- all(is.na(.y))
+            
+            if (all_na1 && all_na2) return(NULL)  # drop both missing
+            if (all_na1) return(.y)
+            if (all_na2) return(.x)
+            
+                                        # both have some non-NA: randomly pick one
+            if (runif(1) < 0.5) .x else .y
+        }
+    )
+    
+    item_pars_M_G3 <- traditional2mirt(bind_cols(Loadings_M_G3, Thresholds_M_G3), 
+                                       "graded", 
+                                       ncat = ncol(Thresholds_M_G3) + 1)
+    
+    mem_fscores_G3 <- simCog(itempars = item_pars_M_G3, 
+                             itemnames = ItemNames, 
+                             prop_high_edu = prop_high_edu, 
+                             b0 = b0, 
+                             b1 = b1, 
+                             n_sample = N, 
+                             cogname = "Mem", 
+                             groupname = "Group 3")
+    
+    
+                                        # Combine -----------------------------------------------------------------
+    
+                                        # head(mem_fscores_G1)
+                                        # head(mem_fscores_G2)
+    
+    mem_fscores <- bind_rows(mem_fscores_G1, mem_fscores_G2)
+    
+    mem_fscores <- mem_fscores %>%
+        mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
+               DemProb_noedu = predict(dem_logr_noedu, newdata = ., type = "response"),
+               Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0),
+               Dementia_noedu = ifelse(DemProb_noedu >= dem_prob_cut, 1, 0))
+    
+    mem_fscores_G3 <- mem_fscores_G3 %>%
+        mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
+               DemProb_noedu = predict(dem_logr_noedu, newdata = ., type = "response"),
+               Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0),
+               Dementia_noedu = ifelse(DemProb_noedu >= dem_prob_cut, 1, 0))
+    
+                                        # 
+                                        # ggplot(mem_fscores, aes(x = Mem_FS, y = DemProb, colour = Dementia)) +
+                                        #   geom_point()
+                                        # 
+                                        # ggplot(mem_fscores, aes(x = Mem_FS, group = Dementia, fill = Dementia)) +
+                                        #   geom_histogram(position = "dodge")
+                                        # 
+                                        # ggplot(mem_fscores, aes(x = theta, y = DemProb, colour = Dementia)) +
+                                        #   geom_point()
+                                        # 
+                                        # ggplot(mem_fscores, aes(x = theta, group = Dementia, fill = Dementia)) +
+                                        #   geom_histogram(position = "dodge")
+    
+                                        # psych::describe(mem_fscores %>%
+                                        #                   select(theta, edu, Mem_FS, DemProb, Dementia))
+                                        # 
+                                        # psych::describeBy(mem_fscores %>%
+                                        #                     select(theta, edu, Mem_FS, DemProb, Dementia),
+                                        #                   mem_fscores$Group)
+    
+    
+                                        # Define Scenarios -----------------------------------------------------------
+    
+    scenarios <- fread(paste0(code_dir, "data/scenarios.csv"))
+    item_names <- names(scenarios)[!names(scenarios) %in% c("scenario", "outcome")]
+    scenario_map <- melt.data.table(scenarios, id.vars = c("scenario", "outcome"), 
+                                    variable.name = "item", value.name = "value")
+    
+    items <- function(s, g){
+        as.character(scenario_map[scenario == s & outcome == g & value == 1, item])
     }
-  )
-  
-  item_pars_M_G3 <- traditional2mirt(bind_cols(Loadings_M_G3, Thresholds_M_G3), 
-                                     "graded", 
-                                     ncat = ncol(Thresholds_M_G3) + 1)
-  
-  mem_fscores_G3 <- simCog(itempars = item_pars_M_G3, 
-                           itemnames = ItemNames, 
-                           prop_high_edu = prop_high_edu, 
-                           b0 = b0, 
-                           b1 = b1, 
-                           n_sample = N, 
-                           cogname = "Mem", 
-                           groupname = "Group 3")
-  
-  
-  # Combine -----------------------------------------------------------------
-  
-  # head(mem_fscores_G1)
-  # head(mem_fscores_G2)
-  
-  mem_fscores <- bind_rows(mem_fscores_G1, mem_fscores_G2)
-  
-  mem_fscores <- mem_fscores %>%
-    mutate(DemProb = if(dem_on_edu) predict(dem_logr, newdata = ., type = "response") else predict(dem_logr_noedu, newdata = ., type = "response"),
-           Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
-  
-  mem_fscores_g3 <- mem_fscores_G3 %>%
-    mutate(DemProb = if(dem_on_edu) predict(dem_logr, newdata = ., type = "response") else predict(dem_logr_noedu, newdata = ., type = "response"),
-           Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0))
-  
-  # 
-  # ggplot(mem_fscores, aes(x = Mem_FS, y = DemProb, colour = Dementia)) +
-  #   geom_point()
-  # 
-  # ggplot(mem_fscores, aes(x = Mem_FS, group = Dementia, fill = Dementia)) +
-  #   geom_histogram(position = "dodge")
-  # 
-  # ggplot(mem_fscores, aes(x = theta, y = DemProb, colour = Dementia)) +
-  #   geom_point()
-  # 
-  # ggplot(mem_fscores, aes(x = theta, group = Dementia, fill = Dementia)) +
-  #   geom_histogram(position = "dodge")
-  
-  # psych::describe(mem_fscores %>%
-  #                   select(theta, edu, Mem_FS, DemProb, Dementia))
-  # 
-  # psych::describeBy(mem_fscores %>%
-  #                     select(theta, edu, Mem_FS, DemProb, Dementia),
-  #                   mem_fscores$Group)
-  
-  
-  # Define Scenarios -----------------------------------------------------------
-  
-  scenarios <- fread(paste0(code_dir, "data/scenarios.csv"))
-  item_names <- names(scenarios)[!names(scenarios) %in% c("scenario", "outcome")]
-  scenario_map <- melt.data.table(scenarios, id.vars = c("scenario", "outcome"), 
-                                  variable.name = "item", value.name = "value")
-  
-  items <- function(s, g){
-    as.character(scenario_map[scenario == s & outcome == g & value == 1, item])
-  }
-  
-  combos <- as.data.table(expand.grid(s = 1:4, g = 1:2))
-  item_lists <- purrr::pmap(combos, items)
-  
-  ## make id variable for combos of scenarios and groups
-  combos[, id := 1:.N]
-  
-  # Get scenario data -----------------------------------------------------------
-  
-  mem_fscores <- as.data.table(mem_fscores)
-  scenario_data <- lapply(1:combos[, max(s)], get_scenario_data,
-                          data = mem_fscores, i_l = item_lists, combs = combos)
-  
-  
-  
-  # Scenario 1 --------------------------------------------------------------
-  
-  scenario_data1 <- scenario_data[[1]]
-  
-  scenario_data1_g1 <- scenario_data1 %>%
-    filter(Group == "Group 1") %>%
-    data.frame()
-  
-  scenario_data1_g2 <- scenario_data1 %>%
-    filter(Group == "Group 2") %>%
-    data.frame()
-  
-  cc1_g1ref <- cocalibrate(rg_dat = scenario_data1_g1,
-                           fg_dat = scenario_data1_g2,
-                           rg_items = item_lists[[combos[s == 1 & g == 1, id]]],
-                           fg_items = item_lists[[combos[s == 1 & g == 2, id]]],
-                           rg_num = 1)
-  
-  cc1_g1ref_data <- bind_rows(cc1_g1ref$fscores_rg %>%
+    
+    combos <- as.data.table(expand.grid(s = 1:4, g = 1:2))
+    item_lists <- purrr::pmap(combos, items)
+    
+    ## make id variable for combos of scenarios and groups
+    combos[, id := 1:.N]
+    
+                                        # Get scenario data -----------------------------------------------------------
+    
+    mem_fscores <- as.data.table(mem_fscores)
+    scenario_data <- lapply(1:combos[, max(s)], get_scenario_data,
+                            data = mem_fscores, i_l = item_lists, combs = combos)
+    
+    
+    ## after simulation
+    cat("after simulation")
+                                        # Scenario 1 --------------------------------------------------------------
+    
+    scenario_data1 <- scenario_data[[1]]
+    
+    scenario_data1_g1 <- scenario_data1 %>%
+        filter(Group == "Group 1") %>%
+        data.frame()
+    
+    scenario_data1_g2 <- scenario_data1 %>%
+        filter(Group == "Group 2") %>%
+        data.frame()
+    
+    cc1_g1ref <- cocalibrate(rg_dat = scenario_data1_g1,
+                             fg_dat = scenario_data1_g2,
+                             rg_items = item_lists[[combos[s == 1 & g == 1, id]]],
+                             fg_items = item_lists[[combos[s == 1 & g == 2, id]]],
+                             rg_num = 1)
+    
+    cc1_g1ref_data <- bind_rows(cc1_g1ref$fscores_rg %>%
                                 set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")), 
-                              cc1_g1ref$fscores_fg %>%
+                                cc1_g1ref$fscores_fg %>%
                                 set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 1")
-  
-  cc1_g2ref <- cocalibrate(fg_dat = scenario_data1_g1,
-                           rg_dat = scenario_data1_g2,
-                           fg_items = item_lists[[combos[s == 1 & g == 1, id]]],
-                           rg_items = item_lists[[combos[s == 1 & g == 2, id]]],
-                           rg_num = 2)
-  
-  cc1_g2ref_data <- bind_rows(cc1_g2ref$fscores_fg %>%
+        mutate(Reference = "Group 1")
+    
+    cc1_g2ref <- cocalibrate(fg_dat = scenario_data1_g1,
+                             rg_dat = scenario_data1_g2,
+                             fg_items = item_lists[[combos[s == 1 & g == 1, id]]],
+                             rg_items = item_lists[[combos[s == 1 & g == 2, id]]],
+                             rg_num = 2)
+    
+    cc1_g2ref_data <- bind_rows(cc1_g2ref$fscores_fg %>%
                                 set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group")),
-                              cc1_g2ref$fscores_rg %>%
+                                cc1_g2ref$fscores_rg %>%
                                 set_names(c("S1_Mem_FS", "S1_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 2")
-  
-  # psych::describeBy(cc1_data, cc1_data$Group)
-  
-  # cc1_mem_g1 <- bind_cols(mem_fscores, cc1_g1ref_data %>% select(-Group))
-  # cc1_mem_g2 <- bind_cols(mem_fscores, cc1_g2ref_data %>% select(-Group))
-  # 
-  # ggplot(cc1_mem_g1, aes(x = Mem_FS, y = S1_Mem_FS)) + geom_point()
-  # ggplot(cc1_mem_g2, aes(x = Mem_FS, y = S1_Mem_FS)) + geom_point()
-  
-  mem_fscores <- bind_cols(bind_rows(mem_fscores, mem_fscores),
-                           bind_rows(cc1_g1ref_data %>% select(-Group), 
-                                     cc1_g2ref_data %>% select(-Group)))
-  
-  # psych::describeBy(mem_fscores %>% filter(Reference == "Group 1"), 
-  #                   mem_fscores %>% filter(Reference == "Group 1") %>% pull(Group))
-  # 
-  # psych::describeBy(mem_fscores %>% filter(Reference == "Group 2"), 
-  #                   mem_fscores %>% filter(Reference == "Group 2") %>% pull(Group))
-  # 
-  
-  
-  # Scenario 2 --------------------------------------------------------------
-  
-  scenario_data2 <- scenario_data[[2]]
-  
-  scenario_data2_g1 <- scenario_data2 %>%
-    filter(Group == "Group 1") %>%
-    data.frame()
-  
-  scenario_data2_g2 <- scenario_data2 %>%
-    filter(Group == "Group 2") %>%
-    data.frame()
-  
-  cc2_g1ref <- cocalibrate(rg_dat = scenario_data2_g1,
-                           fg_dat = scenario_data2_g2,
-                           rg_items = item_lists[[combos[s == 2 & g == 1, id]]],
-                           fg_items = item_lists[[combos[s == 2 & g == 2, id]]],
-                           rg_num = 1)
-  
-  cc2_g1ref_data <- bind_rows(cc2_g1ref$fscores_rg %>%
+        mutate(Reference = "Group 2")
+    
+                                        # psych::describeBy(cc1_data, cc1_data$Group)
+    
+                                        # cc1_mem_g1 <- bind_cols(mem_fscores, cc1_g1ref_data %>% select(-Group))
+                                        # cc1_mem_g2 <- bind_cols(mem_fscores, cc1_g2ref_data %>% select(-Group))
+                                        # 
+                                        # ggplot(cc1_mem_g1, aes(x = Mem_FS, y = S1_Mem_FS)) + geom_point()
+                                        # ggplot(cc1_mem_g2, aes(x = Mem_FS, y = S1_Mem_FS)) + geom_point()
+    
+    mem_fscores <- bind_cols(bind_rows(mem_fscores, mem_fscores),
+                             bind_rows(cc1_g1ref_data %>% select(-Group), 
+                                       cc1_g2ref_data %>% select(-Group)))
+    
+                                        # psych::describeBy(mem_fscores %>% filter(Reference == "Group 1"), 
+                                        #                   mem_fscores %>% filter(Reference == "Group 1") %>% pull(Group))
+                                        # 
+                                        # psych::describeBy(mem_fscores %>% filter(Reference == "Group 2"), 
+                                        #                   mem_fscores %>% filter(Reference == "Group 2") %>% pull(Group))
+                                        # 
+    
+    
+                                        # Scenario 2 --------------------------------------------------------------
+    
+    scenario_data2 <- scenario_data[[2]]
+    
+    scenario_data2_g1 <- scenario_data2 %>%
+        filter(Group == "Group 1") %>%
+        data.frame()
+    
+    scenario_data2_g2 <- scenario_data2 %>%
+        filter(Group == "Group 2") %>%
+        data.frame()
+    
+    cc2_g1ref <- cocalibrate(rg_dat = scenario_data2_g1,
+                             fg_dat = scenario_data2_g2,
+                             rg_items = item_lists[[combos[s == 2 & g == 1, id]]],
+                             fg_items = item_lists[[combos[s == 2 & g == 2, id]]],
+                             rg_num = 1)
+    
+    cc2_g1ref_data <- bind_rows(cc2_g1ref$fscores_rg %>%
                                 set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")), 
-                              cc2_g1ref$fscores_fg %>%
+                                cc2_g1ref$fscores_fg %>%
                                 set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 1")
-  
-  cc2_g2ref <- cocalibrate(fg_dat = scenario_data2_g1,
-                           rg_dat = scenario_data2_g2,
-                           fg_items = item_lists[[combos[s == 2 & g == 1, id]]],
-                           rg_items = item_lists[[combos[s == 2 & g == 2, id]]],
-                           rg_num = 2)
-  
-  cc2_g2ref_data <- bind_rows(cc2_g2ref$fscores_fg %>%
+        mutate(Reference = "Group 1")
+    
+    cc2_g2ref <- cocalibrate(fg_dat = scenario_data2_g1,
+                             rg_dat = scenario_data2_g2,
+                             fg_items = item_lists[[combos[s == 2 & g == 1, id]]],
+                             rg_items = item_lists[[combos[s == 2 & g == 2, id]]],
+                             rg_num = 2)
+    
+    cc2_g2ref_data <- bind_rows(cc2_g2ref$fscores_fg %>%
                                 set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group")), 
-                              cc2_g2ref$fscores_rg %>%
+                                cc2_g2ref$fscores_rg %>%
                                 set_names(c("S2_Mem_FS", "S2_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 2")
-  
-  # psych::describeBy(cc2_data, cc2_data$Group)
-  
-  
-  mem_fscores <- bind_cols(mem_fscores,
-                           bind_rows(cc2_g1ref_data %>% select(-Group, -Reference), 
-                                     cc2_g2ref_data %>% select(-Group, -Reference)))
-  
-  # psych::describeBy(mem_fscores, mem_fscores$Group)
-  
-  
-  # Scenario 3 --------------------------------------------------------------
-  
-  scenario_data3 <- scenario_data[[3]]
-  
-  scenario_data3_g1 <- scenario_data3 %>%
-    filter(Group == "Group 1") %>%
-    data.frame()
-  
-  scenario_data3_g2 <- scenario_data3 %>%
-    filter(Group == "Group 2") %>%
-    data.frame()
-  
-  cc3_g1ref <- cocalibrate(rg_dat = scenario_data3_g1,
-                           fg_dat = scenario_data3_g2,
-                           rg_items = item_lists[[combos[s == 3 & g == 1, id]]],
-                           fg_items = item_lists[[combos[s == 3 & g == 2, id]]],
-                           rg_num = 1)
-  
-  cc3_g1ref_data <- bind_rows(cc3_g1ref$fscores_rg %>%
+        mutate(Reference = "Group 2")
+    
+                                        # psych::describeBy(cc2_data, cc2_data$Group)
+    
+    
+    mem_fscores <- bind_cols(mem_fscores,
+                             bind_rows(cc2_g1ref_data %>% select(-Group, -Reference), 
+                                       cc2_g2ref_data %>% select(-Group, -Reference)))
+    
+                                        # psych::describeBy(mem_fscores, mem_fscores$Group)
+    
+    
+                                        # Scenario 3 --------------------------------------------------------------
+    
+    scenario_data3 <- scenario_data[[3]]
+    
+    scenario_data3_g1 <- scenario_data3 %>%
+        filter(Group == "Group 1") %>%
+        data.frame()
+    
+    scenario_data3_g2 <- scenario_data3 %>%
+        filter(Group == "Group 2") %>%
+        data.frame()
+    
+    cc3_g1ref <- cocalibrate(rg_dat = scenario_data3_g1,
+                             fg_dat = scenario_data3_g2,
+                             rg_items = item_lists[[combos[s == 3 & g == 1, id]]],
+                             fg_items = item_lists[[combos[s == 3 & g == 2, id]]],
+                             rg_num = 1)
+    
+    cc3_g1ref_data <- bind_rows(cc3_g1ref$fscores_rg %>%
                                 set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")), 
-                              cc3_g1ref$fscores_fg %>%
+                                cc3_g1ref$fscores_fg %>%
                                 set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 1")
-  
-  cc3_g2ref <- cocalibrate(fg_dat = scenario_data3_g1,
-                           rg_dat = scenario_data3_g2,
-                           fg_items = item_lists[[combos[s == 3 & g == 1, id]]],
-                           rg_items = item_lists[[combos[s == 3 & g == 2, id]]],
-                           rg_num = 2)
-  
-  cc3_g2ref_data <- bind_rows(cc3_g2ref$fscores_fg %>%
+        mutate(Reference = "Group 1")
+    
+    cc3_g2ref <- cocalibrate(fg_dat = scenario_data3_g1,
+                             rg_dat = scenario_data3_g2,
+                             fg_items = item_lists[[combos[s == 3 & g == 1, id]]],
+                             rg_items = item_lists[[combos[s == 3 & g == 2, id]]],
+                             rg_num = 2)
+    
+    cc3_g2ref_data <- bind_rows(cc3_g2ref$fscores_fg %>%
                                 set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group")), 
-                              cc3_g2ref$fscores_rg %>%
+                                cc3_g2ref$fscores_rg %>%
                                 set_names(c("S3_Mem_FS", "S3_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 2")
-  
-  # psych::describeBy(cc3_data, cc3_data$Group)
-  
-  
-  mem_fscores <- bind_cols(mem_fscores,
-                           bind_rows(cc3_g1ref_data %>% select(-Group, -Reference), 
-                                     cc3_g2ref_data %>% select(-Group, -Reference)))
-  
-  # psych::describeBy(mem_fscores, mem_fscores$Group)
-  
-  
-  # Scenario 4 --------------------------------------------------------------
-  
-  scenario_data4 <- scenario_data[[4]]
-  
-  scenario_data4_g1 <- scenario_data4 %>%
-    filter(Group == "Group 1") %>%
-    data.frame()
-  
-  scenario_data4_g2 <- scenario_data4 %>%
-    filter(Group == "Group 2") %>%
-    data.frame()
-  
-  cc4_g1ref <- cocalibrate(rg_dat = scenario_data4_g1,
-                           fg_dat = scenario_data4_g2,
-                           rg_items = item_lists[[combos[s == 4 & g == 1, id]]],
-                           fg_items = item_lists[[combos[s == 4 & g == 2, id]]],
-                           rg_num = 1)
-  
-  cc4_g1ref_data <- bind_rows(cc4_g1ref$fscores_rg %>%
+        mutate(Reference = "Group 2")
+    
+                                        # psych::describeBy(cc3_data, cc3_data$Group)
+    
+    
+    mem_fscores <- bind_cols(mem_fscores,
+                             bind_rows(cc3_g1ref_data %>% select(-Group, -Reference), 
+                                       cc3_g2ref_data %>% select(-Group, -Reference)))
+    
+                                        # psych::describeBy(mem_fscores, mem_fscores$Group)
+    
+    
+                                        # Scenario 4 --------------------------------------------------------------
+    
+    scenario_data4 <- scenario_data[[4]]
+    
+    scenario_data4_g1 <- scenario_data4 %>%
+        filter(Group == "Group 1") %>%
+        data.frame()
+    
+    scenario_data4_g2 <- scenario_data4 %>%
+        filter(Group == "Group 2") %>%
+        data.frame()
+    
+    cc4_g1ref <- cocalibrate(rg_dat = scenario_data4_g1,
+                             fg_dat = scenario_data4_g2,
+                             rg_items = item_lists[[combos[s == 4 & g == 1, id]]],
+                             fg_items = item_lists[[combos[s == 4 & g == 2, id]]],
+                             rg_num = 1)
+    
+    cc4_g1ref_data <- bind_rows(cc4_g1ref$fscores_rg %>%
                                 set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")), 
-                              cc4_g1ref$fscores_fg %>%
+                                cc4_g1ref$fscores_fg %>%
                                 set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 1")
-  
-  cc4_g2ref <- cocalibrate(fg_dat = scenario_data4_g1,
-                           rg_dat = scenario_data4_g2,
-                           fg_items = item_lists[[combos[s == 4 & g == 1, id]]],
-                           rg_items = item_lists[[combos[s == 4 & g == 2, id]]],
-                           rg_num = 2)
-  
-  cc4_g2ref_data <- bind_rows(cc4_g2ref$fscores_fg %>%
+        mutate(Reference = "Group 1")
+    
+    cc4_g2ref <- cocalibrate(fg_dat = scenario_data4_g1,
+                             rg_dat = scenario_data4_g2,
+                             fg_items = item_lists[[combos[s == 4 & g == 1, id]]],
+                             rg_items = item_lists[[combos[s == 4 & g == 2, id]]],
+                             rg_num = 2)
+    
+    cc4_g2ref_data <- bind_rows(cc4_g2ref$fscores_fg %>%
                                 set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group")), 
-                              cc4_g2ref$fscores_rg %>%
+                                cc4_g2ref$fscores_rg %>%
                                 set_names(c("S4_Mem_FS", "S4_Mem_SE", "Group"))) %>%
-    mutate(Reference = "Group 2")
-  
-  # psych::describeBy(cc4_data, cc4_data$Group)
-  
-  
-  mem_fscores <- bind_cols(mem_fscores,
-                           bind_rows(cc4_g1ref_data %>% select(-Group, -Reference), 
-                                     cc4_g2ref_data %>% select(-Group, -Reference)))
-  
-  # psych::describeBy(mem_fscores, mem_fscores$Group)
-  
-  # ggplot(mem_fscores, aes(x = Mem_FS, y = S1_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
-  # ggplot(mem_fscores, aes(x = Mem_FS, y = S2_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
-  # ggplot(mem_fscores, aes(x = Mem_FS, y = S3_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
-  # ggplot(mem_fscores, aes(x = Mem_FS, y = S4_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
-  
-  
-  # Run regression models on cocalibrated scores -------------------------------------
-  
-  
-  
-  cocalibration_results_g1ref <- rbindlist(lapply(1:combos[, max(s)], 
-                                                  cocalibrated_regressions, 
-                                                  factorscores = mem_fscores %>%
-                                                    filter(Reference == "Group 1"))) %>%
-    mutate(cc_rg = "Group 1")
-  
-  cocalibration_results_g2ref <- rbindlist(lapply(1:combos[, max(s)], 
-                                                  cocalibrated_regressions, 
-                                                  factorscores = mem_fscores %>%
-                                                    filter(Reference == "Group 2"))) %>%
-    mutate(cc_rg = "Group 2")
-  
-  # x <- ggplot(mem_fscores, aes(x = edu, y = S2_Mem_FS)) + 
-  #   geom_jitter() + 
-  #   theme_bw()
-  # 
-  # x
-  
-  # Crosswalk ---------------------------------------------------------------
-  
-  
-  crswkoutlist <- outdfs <- datasets <- vector("list", 4)
-  for(scen in 1:4)
-  {
-    itemnmslist <- list(item_lists[[combos[s == scen & g == 1, id]]],
-                        item_lists[[combos[s == scen & g == 2, id]]])
-    groupdatalist <- list(scenario_data[[scen]] %>% filter(Group == "Group 1") %>%
-                            getscore(itemnmslist[[1]], "score1") %>%
-                            getscore(itemnmslist[[2]], "score2"),
-                          scenario_data[[scen]] %>% filter(Group == "Group 2") %>%
-                            getscore(itemnmslist[[1]], "score1") %>%
-                            getscore(itemnmslist[[2]], "score2"))
-    datasets[[scen]] <- groupdatalist
-    crswkoutlist[[scen]] <- list(getcrosswalk(groupdatalist[[1]], "score2", "score1"),
-                                 getcrosswalk(groupdatalist[[2]], "score1", "score2"))
-    edufits <- list(lm(score2 ~ edu, groupdatalist[[2]]),
-                    lm(score1 ~ edu, groupdatalist[[1]]))
+        mutate(Reference = "Group 2")
     
-    coefs <- sapply(1:2, function(i)
+                                        # psych::describeBy(cc4_data, cc4_data$Group)
+    
+    
+    mem_fscores <- bind_cols(mem_fscores,
+                             bind_rows(cc4_g1ref_data %>% select(-Group, -Reference), 
+                                       cc4_g2ref_data %>% select(-Group, -Reference)))
+    
+                                        # psych::describeBy(mem_fscores, mem_fscores$Group)
+    
+                                        # ggplot(mem_fscores, aes(x = Mem_FS, y = S1_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+                                        # ggplot(mem_fscores, aes(x = Mem_FS, y = S2_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+                                        # ggplot(mem_fscores, aes(x = Mem_FS, y = S3_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+                                        # ggplot(mem_fscores, aes(x = Mem_FS, y = S4_Mem_FS, colour = Group)) + geom_point() + facet_wrap(~Reference)
+    
+    
+                                        # Run regression models on cocalibrated scores -------------------------------------
+    
+    
+    
+    cocalibration_results_g1ref <- rbindlist(lapply(1:combos[, max(s)], 
+                                                    cocalibrated_regressions, 
+                                                    factorscores = mem_fscores %>%
+                                                        filter(Reference == "Group 1"))) %>%
+        mutate(cc_rg = "Group 1")
+    
+    cocalibration_results_g2ref <- rbindlist(lapply(1:combos[, max(s)], 
+                                                    cocalibrated_regressions, 
+                                                    factorscores = mem_fscores %>%
+                                                        filter(Reference == "Group 2"))) %>%
+        mutate(cc_rg = "Group 2")
+    
+                                        # x <- ggplot(mem_fscores, aes(x = edu, y = S2_Mem_FS)) + 
+                                        #   geom_jitter() + 
+                                        #   theme_bw()
+                                        # 
+                                        # x
+    
+                                        # Crosswalk ---------------------------------------------------------------
+
+    mem_fscores_cogxwalkr <- bind_rows(mem_fscores_G1, mem_fscores_G2, mem_fscores_G3)
+    
+    mem_fscores_cogxwalkr <- mem_fscores_cogxwalkr %>%
+        mutate(DemProb = predict(dem_logr, newdata = ., type = "response"),
+               DemProb_noedu = predict(dem_logr_noedu, newdata = ., type = "response"),
+               Dementia = ifelse(DemProb >= dem_prob_cut, 1, 0),
+               Dementia_noedu = ifelse(DemProb_noedu >= dem_prob_cut, 1, 0))
+    
+    mem_fscores_cogxwalkr <- as.data.table(mem_fscores_cogxwalkr)
+    scenario_data2 <- lapply(1:combos[, max(s)], get_scenario_data,
+                             data = mem_fscores_cogxwalkr, i_l = item_lists, combs = combos)
+   
+
+        
+    crswkoutlist <- outdfs <- datasets <- vector("list", 4)
+    for(scen in 1:4)
     {
-      coef(crswkoutlist[[scen]][[i]]$fit)*coef(edufits[[i]])["edu"]
-    })
+        itemnmslist <- list(item_lists[[combos[s == scen & g == 1, id]]],
+                            item_lists[[combos[s == scen & g == 2, id]]])
+        groupdatalist <- list(scenario_data2[[scen]] %>% filter(Group == "Group 1") %>%
+                              getscore(itemnmslist[[1]], "score1") %>%
+                              getscore(itemnmslist[[2]], "score2") %>%
+                              getsumscore(itemnmslist[[1]], "sumscore1") %>%
+                              getsumscore(itemnmslist[[2]], "sumscore2"),
+                              scenario_data2[[scen]] %>% filter(Group == "Group 2") %>%
+                              getscore(itemnmslist[[1]], "score1") %>%
+                              getscore(itemnmslist[[2]], "score2") %>%
+                              getsumscore(itemnmslist[[1]], "sumscore1") %>%
+                              getsumscore(itemnmslist[[2]], "sumscore2"),
+                              scenario_data2[[scen]] %>% filter(Group == "Group 3") %>%
+                              getscore(itemnmslist[[1]], "score1") %>%
+                              getscore(itemnmslist[[2]], "score2") %>%
+                              getsumscore(itemnmslist[[1]], "sumscore1") %>%
+                              getsumscore(itemnmslist[[2]], "sumscore2"))
+        datasets[[scen]] <- groupdatalist
+        crswkoutlist[[scen]] <- list(getcrosswalk(groupdatalist[[3]], "sumscore2", "score1", iter,
+                                                  condvar = "Dementia", CI = CI), #g1
+                                     getcrosswalk(groupdatalist[[3]], "sumscore1", "score2", iter,
+                                                  condvar = "Dementia", CI = CI), #g2
+                                     ## do silly variable replacement because crosswalk function can only handle a splitting variable named "Dementia"
+                                     getcrosswalk(groupdatalist[[3]] %>%
+                                                  select(-Dementia) %>%
+                                                  rename(Dementia = Dementia_noedu),
+                                                  "sumscore2", "score1", iter,
+                                                  condvar = "Dementia", CI = CI), #g1
+                                     getcrosswalk(groupdatalist[[3]] %>%
+                                                  select(-Dementia) %>%
+                                                  rename(Dementia = Dementia_noedu),
+                                                  "sumscore1", "score2", iter,
+                                                  condvar = "Dementia", CI = CI)) # g2
+        edufits <- list(lm(sumscore2 ~ edu, groupdatalist[[2]]),
+                        lm(sumscore1 ~ edu, groupdatalist[[1]]))
+        edufits2 <- list(lm(score1 ~ edu, groupdatalist[[2]]),
+                         lm(score2 ~ edu, groupdatalist[[1]]))
+        ## cogxwalkr method estimates
+        crswkoutdf <- do.call(rbind.data.frame, lapply(1:4, function(i)
+        {
+            crswkout <- do_crosswalk(crswkoutlist[[scen]][[i]],
+                                     est_mean = coef(edufits[[c(1,2,1,2)[i]]])["edu"],
+                                     est_se = summary(edufits[[c(1,2,1,2)[i]]])$coef["edu", "Std. Error"])$crosswalk
+            return(data.frame(coef = crswkout$mean, lwr = crswkout$ll, upr = crswkout$ul))
+        }))
+        #### checked that this is the same output as 
+        ## coefs <- sapply(1:4, function(i)
+        ## {
+        ##     coef(crswkoutlist[[scen]][[i]]$fit)*coef(edufits[[i %% 2 + 1]])["edu"]
+        ## })
+        ## coef targets of the method
+        truecoefs <- sapply(1:2, function(i)
+        {
+            coef(edufits2[[i]])["edu"]
+        })
+        ## associations ignoring any kind of harmonization (just using whatever outcome we have)
+        naivecoefs <- sapply(1:2, function(i) {coef(edufits[[i]])["edu"]})
+        
+        outdfs[[scen]] <- cbind.data.frame(scenario = scen,
+                                           crosswalk_to = rep(c("Group 2", "Group 1"), 2),
+                                           coef = crswkoutdf$coef,
+                                           lwr = crswkoutdf$lwr, upr = crswkoutdf$upr,
+                                           demwithedu = c(T,T,F,F),
+                                           truecoefs = rep(truecoefs, 2),
+                                           naivecoefs = rep(naivecoefs, 2)) 
+    }
+    allout <- do.call(rbind.data.frame, outdfs) %>%
+        left_join(scenario_labels, by = "scenario")
+
     
-    edufits2 <- list(lm(score1 ~ edu, groupdatalist[[2]]),
-                     lm(score2 ~ edu, groupdatalist[[1]]))
+                                        # cocalibration_results
     
-    truecoefs <- sapply(1:2, function(i)
-    {
-      coef(edufits2[[i]])["edu"]
-    })
+    cwxco <- cocalibration_results_g1ref %>%
+        mutate(Method = "Cocalibration",
+               truecoefs = allout %>% filter(demwithedu == T) %>% pull(truecoefs),
+               naivecoefs = allout %>% filter(demwithedu == T) %>% pull(naivecoefs)) %>%
+        bind_rows(cocalibration_results_g2ref %>%
+                  mutate(Method = "Cocalibration",
+                         truecoefs = allout %>% filter(demwithedu == T) %>% pull(truecoefs),
+                         naivecoefs = allout %>% filter(demwithedu == T) %>% pull(naivecoefs))) %>%
+        bind_rows(allout %>%
+                  mutate(Method = "cogxwalkr"))
+
+##     cwxco <- allout %>%
+##         left_join(scenario_labels, by = "scenario") %>%
+##         rename(coef = coefs) %>%
+##         mutate(Method = "cogxwalkr",
+##                cc_rg = NA) %>%
+##         select(c("scenario", "crosswalk_to", "coef", "slabel", "cc_rg", "Method", 
+## "truecoefs", "naivecoefs"))
+
     
-    ## associations ignoring any kind of harmonization (just using whatever outcome we have)
-    naivecoefs <- c(coef(lm(score2 ~ edu, groupdatalist[[2]]))["edu"],
-                    coef(lm(score1 ~ edu, groupdatalist[[1]]))["edu"])
+                                        # cwxco_g2ref <- cocalibration_results_g2ref %>%
+                                        #   mutate(Method = "Cocalibration",
+                                        #          truecoefs = allout$truecoefs,
+                                        #          naivecoefs = allout$naivecoefs) %>%
+                                        #   bind_rows(allout %>%
+                                        #               mutate(slabel = cocalibration_results_g2ref$slabel,
+                                        #                      Method = "cogxwalkr") %>%
+                                        #               rename(coef = coefs))
+                                        # 
+                                        # cwxco <- bind_rows(cwxco_g1ref, cwxco_g2ref)
     
-    outdfs[[scen]] <- cbind.data.frame(scenario = scen, crosswalk_to = c("Group 2", "Group 1"),
-                                       coefs = coefs, truecoefs = truecoefs, naivecoefs = naivecoefs) 
-  }
-  allout <- do.call(rbind.data.frame, outdfs)
-  
-  # cocalibration_results
-  
-  cwxco <- cocalibration_results_g1ref %>%
-    mutate(Method = "Cocalibration",
-           truecoefs = allout$truecoefs,
-           naivecoefs = allout$naivecoefs) %>%
-    bind_rows(cocalibration_results_g2ref %>%
-                mutate(Method = "Cocalibration",
-                       truecoefs = allout$truecoefs,
-                       naivecoefs = allout$naivecoefs)) %>%
-    bind_rows(allout %>%
-                mutate(slabel = cocalibration_results_g1ref$slabel,
-                       Method = "cogxwalkr") %>%
-                rename(coef = coefs))
-  
-  # cwxco_g2ref <- cocalibration_results_g2ref %>%
-  #   mutate(Method = "Cocalibration",
-  #          truecoefs = allout$truecoefs,
-  #          naivecoefs = allout$naivecoefs) %>%
-  #   bind_rows(allout %>%
-  #               mutate(slabel = cocalibration_results_g2ref$slabel,
-  #                      Method = "cogxwalkr") %>%
-  #               rename(coef = coefs))
-  # 
-  # cwxco <- bind_rows(cwxco_g1ref, cwxco_g2ref)
-  
-  cc_models <- list(cc1_g1ref = cc1_g1ref, cc2_g1ref = cc2_g1ref, cc3_g1ref = cc3_g1ref, cc4_g1ref = cc4_g1ref,
-                    cc1_g2ref = cc1_g2ref, cc2_g2ref = cc2_g2ref, cc3_g2ref = cc3_g2ref, cc4_g2ref = cc4_g2ref)
-  if(!file.exists("models/cc_models.Rds")) saveRDS(cc_models, "models/cc_models.Rds")
-  
-  return(cwxco)
+    ## cc_models <- list(cc1_g1ref = cc1_g1ref, cc2_g1ref = cc2_g1ref, cc3_g1ref = cc3_g1ref, cc4_g1ref = cc4_g1ref,
+    ##                   cc1_g2ref = cc1_g2ref, cc2_g2ref = cc2_g2ref, cc3_g2ref = cc3_g2ref, cc4_g2ref = cc4_g2ref)
+    ## if(!file.exists("models/cc_models.Rds")) saveRDS(cc_models, "models/cc_models.Rds")
+    
+    return(cwxco)
 }
 
