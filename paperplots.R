@@ -51,7 +51,7 @@ date <- format(Sys.Date(), "%Y_%m_%d")
 
 # LOAD FILES -----------------------------------------------------------
 
-files <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_ci_aug2026", full.names = TRUE)
+files <- list.files(paste0(code_dir, "models/"), pattern = "allresn[0-9]*_d[0-9]_ci_sep2026", full.names = TRUE)
 alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(file))))
 
 # FORMAT DATA -----------------------------------------------------------
@@ -59,7 +59,7 @@ alldata <- rbindlist(lapply(files, function(file) as.data.table(readr::read_rds(
 format_data <- function(data, CI = FALSE) {
     ## for cocalibration - scaling should be from the version that you are crosswalking to - so only
     ## keep the version that where the reference matches the version you are crosswalking to
-    data <- data[!(Method == "Cocalibration" & !crosswalk_to == cc_rg)]
+    data <- data[!(Method == "Cocalibration" & !str_extract(crosswalk_to, "[0-9]") == str_extract(cc_rg, "[0-9]"))]
 
     ## define bias and other variables
     data[, `:=`(
@@ -69,7 +69,7 @@ format_data <- function(data, CI = FALSE) {
     data[Method == "cogxwalkr", Method := "ES Crosswalking"][, Method := factor(Method, levels = c("Cocalibration", "ES Crosswalking"))]
     data[, `:=`(
         slabel = fct_inorder(slabel), eslabel = factor(paste0("ES ", b1), levels = c("ES 0.2", "ES 0.4")),
-        crosswalk_to = factor(gsub("Group ", "O", crosswalk_to), levels = c("O1", "O2")),
+        crosswalk_to = factor(gsub("Outcome ", "O", crosswalk_to), levels = c("O1", "O2")),
         N_label = factor(paste0("N=", n_sample), levels = c("N=500", "N=1000", "N=5000"))
     )]
     data[, x_factor := fct_cross(eslabel, N_label, sep = "\n")]
@@ -252,11 +252,11 @@ get_coverageplot <- function(yvar = "CIcoverage", dataset = maindata, cw_to = "O
         theme(legend.position = "bottom") +
         scale_y_continuous(
             limits = c(0.01, 1),
-            breaks = c(0, seq(0.75, 1, by = 0.05)),
+            breaks = c(0, seq(0.9, 1, by = 0.05)),
             labels = scales::label_percent()
         ) +
         ggbreak::scale_y_break(
-            c(0, 0.75)
+            c(0, 0.9)
         ) +
         scale_shape_manual(name = "", values = c(16, 16, 17, 17)) +
         scale_color_manual(name = "", values = c("#5e7cad", "#1b3c71", "#e78147", "#d25309"))
@@ -273,3 +273,30 @@ ggsave(paste0(code_dir, "plots/Figure4_coverageplot_", date, ".pdf"), coveragepl
 maindata[, .(ciwidth = mean(CIwidth), cicoverage = mean(CIcoverage)), by = c("slabel", "x_factor", "fill_factor")]
 widthplot <- get_meanplot(yvar = "CIwidth", cw_to = NA, percent_labels = FALSE, ylabel = "Mean CI Width")
 ggsave(paste0(code_dir, "plots/FigureS2_CIwidth_", date, ".pdf"), widthplot, width = 14, height = 5)
+
+# RESULTS SECTION --------------------------------------------------------
+
+dt <- copy(maindata[slabel == "Strong DIF + Strong anchor" & Method == "Cocalibration"])
+get_mean_bias <- function(dt){
+
+    summary_dt <- dt[, .(
+        mean = mean(pct_bias_truth, na.rm = TRUE)), 
+    by = c("slabel", "x_factor", "fill_factor")]
+    mean_dt <- summary_dt[, .(
+        mean_means = mean(abs(mean)), sd = sd(abs(mean)), n = .N
+    )]
+    mean_dt[, se := sd / sqrt(n)]
+    # Use t critical value with df = n-1 (guard df >= 1)
+    mean_dt[, `:=`(
+        tcrit = qt(0.975, df = pmax(n - 1, 1)),
+        lower = mean_means - qt(0.975, df = pmax(n - 1, 1)) * se,
+        upper = mean_means + qt(0.975, df = pmax(n - 1, 1)) * se
+    )]
+    message(sprintf("Mean bias for %s: %.1f (%.1f, %.1f)", dt$Method[1], mean_dt$mean_means[1]*100, mean_dt$lower[1]*100, mean_dt$upper[1]*100))
+}
+
+get_mean_bias(maindata[slabel == "No DIF + Strong anchor" & Method == "Cocalibration"])
+get_mean_bias(maindata[slabel == "No DIF + Strong anchor" & Method == "ES Crosswalking" & dementia_generation_normal == TRUE])
+
+get_mean_bias(maindata[slabel == "Weak DIF + Strong anchor" & Method == "Cocalibration"])
+get_mean_bias(maindata[slabel == "Weak DIF + Strong anchor" & Method == "ES Crosswalking" & dementia_generation_normal == TRUE])
