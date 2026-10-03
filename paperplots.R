@@ -33,7 +33,7 @@
 ##########################################################
 
 library(pacman)
-p_load(magrittr, dplyr, forcats, ggplot2, tidyr, data.table, patchwork, ggtext, binom)
+p_load(magrittr, dplyr, forcats, ggplot2, tidyr, data.table, patchwork, ggtext, binom, stringr)
 
 user <- Sys.info()[["user"]]
 
@@ -276,7 +276,6 @@ ggsave(paste0(code_dir, "plots/FigureS2_CIwidth_", date, ".pdf"), widthplot, wid
 
 # RESULTS SECTION --------------------------------------------------------
 
-dt <- copy(maindata[slabel == "Strong DIF + Strong anchor" & Method == "Cocalibration"])
 get_mean_bias <- function(dt){
 
     summary_dt <- dt[, .(
