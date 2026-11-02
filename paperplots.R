@@ -124,11 +124,11 @@ get_boxplot <- function(yvar = "bias_sim", dataset = maindata, cw_to = "O2", yla
     return(p)
 }
 
-trueplot <- get_boxplot(yvar = "bias_sim", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. sim parameter)")
+trueplot <- get_boxplot(yvar = "bias_sim", cw_to = NA, ylab = "Signed bias \n(estimate vs. simulation parameter)")
 
 # COMPARISONS TO TARGET COEFFICIENTS ---------------------------------------
 
-targetplot <- get_boxplot(yvar = "bias_truth", cw_to = NA, ylab = "Absolute Bias \n(estimate vs. target coef)")
+targetplot <- get_boxplot(yvar = "bias_truth", cw_to = NA, ylab = "Signed bias \n(estimate vs. target coefficient)")
 
 # JOINT FIGURE 1 --------------------------------------------------------------
 
@@ -251,12 +251,12 @@ get_coverageplot <- function(yvar = "CIcoverage", dataset = maindata, cw_to = "O
         theme_bw() +
         theme(legend.position = "bottom") +
         scale_y_continuous(
-            limits = c(0.01, 1),
+            limits = c(0, 1),
             breaks = c(0, seq(0.9, 1, by = 0.05)),
             labels = scales::label_percent()
         ) +
         ggbreak::scale_y_break(
-            c(0, 0.9)
+            c(0.01, 0.9)
         ) +
         scale_shape_manual(name = "", values = c(16, 16, 17, 17)) +
         scale_color_manual(name = "", values = c("#5e7cad", "#1b3c71", "#e78147", "#d25309"))
@@ -276,26 +276,62 @@ ggsave(paste0(code_dir, "plots/FigureS2_CIwidth_", date, ".pdf"), widthplot, wid
 
 # RESULTS SECTION --------------------------------------------------------
 
-get_mean_bias <- function(dt){
+get_mean_abs_bias <- function(dt, n_boot = 2000, seed = 20261030) {
 
-    summary_dt <- dt[, .(
-        mean = mean(pct_bias_truth, na.rm = TRUE)), 
-    by = c("slabel", "x_factor", "fill_factor")]
-    mean_dt <- summary_dt[, .(
-        mean_means = mean(abs(mean)), sd = sd(abs(mean)), n = .N
-    )]
-    mean_dt[, se := sd / sqrt(n)]
-    # Use t critical value with df = n-1 (guard df >= 1)
-    mean_dt[, `:=`(
-        tcrit = qt(0.975, df = pmax(n - 1, 1)),
-        lower = mean_means - qt(0.975, df = pmax(n - 1, 1)) * se,
-        upper = mean_means + qt(0.975, df = pmax(n - 1, 1)) * se
-    )]
-    message(sprintf("Mean bias for %s: %.1f (%.1f, %.1f)", dt$Method[1], mean_dt$mean_means[1]*100, mean_dt$lower[1]*100, mean_dt$upper[1]*100))
+    # One value per independent repetition and condition
+    iteration_dt <- dt[, .(
+        bias = mean(pct_bias_truth, na.rm = TRUE)
+    ), by = .(rep, slabel, x_factor, fill_factor)]
+
+    # Repetitions in rows; fixed simulation conditions in columns
+    wide_dt <- dcast(
+        iteration_dt,
+        rep ~ slabel + x_factor + fill_factor,
+        value.var = "bias"
+    )
+
+    bias_matrix <- as.matrix(
+        wide_dt[, setdiff(names(wide_dt), "rep"), with = FALSE]
+    )
+
+    # Equal-weighted mean absolute bias across conditions
+    estimate <- mean(abs(colMeans(bias_matrix, na.rm = TRUE)))
+
+    # Resample whole repetitions, preserving pairing across conditions
+    set.seed(seed)
+
+    boot_estimates <- replicate(n_boot, {
+        sampled_rows <- sample.int(
+            nrow(bias_matrix),
+            size = nrow(bias_matrix),
+            replace = TRUE
+        )
+
+        sampled_means <- colMeans(
+            bias_matrix[sampled_rows, , drop = FALSE],
+            na.rm = TRUE
+        )
+
+        mean(abs(sampled_means))
+    })
+
+    interval <- quantile(
+        boot_estimates,
+        probs = c(0.025, 0.975),
+        na.rm = TRUE
+    )
+
+    message(sprintf(
+        "Mean absolute bias for %s: %.1f (lwr: %.1f, upr: %.1f)",
+        dt$Method[1],
+        estimate * 100,
+        interval[1] * 100,
+        interval[2] * 100
+    ))
 }
 
-get_mean_bias(maindata[slabel == "No DIF + Strong anchor" & Method == "Cocalibration"])
-get_mean_bias(maindata[slabel == "No DIF + Strong anchor" & Method == "ES Crosswalking" & dementia_generation_normal == TRUE])
+get_mean_abs_bias(maindata[slabel == "No DIF + Strong anchor" & Method == "Cocalibration"])
+get_mean_abs_bias(maindata[slabel == "No DIF + Strong anchor" & Method == "ES Crosswalking" & dementia_generation_normal == TRUE])
 
-get_mean_bias(maindata[slabel == "Weak DIF + Strong anchor" & Method == "Cocalibration"])
-get_mean_bias(maindata[slabel == "Weak DIF + Strong anchor" & Method == "ES Crosswalking" & dementia_generation_normal == TRUE])
+get_mean_abs_bias(maindata[slabel == "Weak DIF + Strong anchor" & Method == "Cocalibration"])
+get_mean_abs_bias(maindata[slabel == "Weak DIF + Strong anchor" & Method == "ES Crosswalking" & dementia_generation_normal == TRUE])
