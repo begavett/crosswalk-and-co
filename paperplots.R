@@ -136,7 +136,7 @@ fig1 <- trueplot / targetplot +
     plot_annotation(tag_levels = "A", tag_suffix = ".") +
     plot_layout(guides = "collect") & theme(legend.position = "bottom")
 
-ggsave(paste0(code_dir, "plots/Figure2_distributions_", date, ".pdf"), fig1, width = 14, height = 9)
+ggsave(paste0(code_dir, "plots/Figure2_distributions_", date, ".tiff"), fig1, width = 14, height = 9)
 
 # MEAN COMPARISON --------------------------------------------------------------
 
@@ -194,7 +194,7 @@ get_meanplot <- function(yvar, dataset = maindata, cw_to = "O2", color_var = "fi
 
 meanplots <- lapply(c("pct_bias_sim", "pct_bias_truth"), function(y) get_meanplot(y, cw_to = NA))
 
-ggsave(paste0(code_dir, "plots/Figure3_meanplots_", date, ".pdf"), meanplots[[2]], width = 14, height = 5)
+ggsave(paste0(code_dir, "plots/Figure3_meanplots_", date, ".tiff"), meanplots[[2]], width = 14, height = 5)
 ggsave(paste0(code_dir, "plots/FigureS1_meanplots_sim_", date, ".pdf"), meanplots[[1]], width = 14, height = 5)
 
 
@@ -266,7 +266,7 @@ get_coverageplot <- function(yvar = "CIcoverage", dataset = maindata, cw_to = "O
 coverageplot <- get_coverageplot(cw_to = NA)
 coverageplot_sim <- get_coverageplot(cw_to = NA, yvar = "CIcoverage_sim")
 
-ggsave(paste0(code_dir, "plots/Figure4_coverageplot_", date, ".pdf"), coverageplot, width = 14, height = 5)
+ggsave(paste0(code_dir, "plots/Figure4_coverageplot_", date, ".tiff"), coverageplot, width = 14, height = 5)
 
 # CI WIDTH ------------------------------------------------------------------
 
